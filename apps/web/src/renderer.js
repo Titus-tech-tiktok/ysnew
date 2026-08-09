@@ -354,6 +354,10 @@ function formatMoney(minor = 0) {
   return `$${formatUsdAmount(Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE)}`;
 }
 
+function formatMobileStatsMoney(minor = 0) {
+  return `$${(Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE).toFixed(2)}`;
+}
+
 function formatDurationMs(ms = 0) {
   const totalSeconds = Math.max(0, Math.floor(Number(ms) / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -593,7 +597,7 @@ function mobileStatsRangeCard(item, maxCostMinor) {
   return `
     <article class="mobile-stats-range-card">
       <div class="mobile-stats-card-top"><span>${escapeHtml(item.label)}</span><em>${formatPercent(totals.successRate)}</em></div>
-      <strong>${formatMoney(totals.totalCostMinor)}</strong>
+      <strong>${formatMobileStatsMoney(totals.totalCostMinor)}</strong>
       <div class="mobile-stats-card-meta"><b>${formatInteger(totals.imageGenerated || 0)}</b><span>首次</span><b>${formatInteger(totals.imageRegenerated || 0)}</b><span>重生</span></div>
       <div class="mobile-stats-progress"><i style="width:${percent}%"></i></div>
     </article>`;
@@ -629,7 +633,7 @@ function renderMobileStats() {
       <div class="mobile-stats-account-row">
         <span class="mobile-stats-rank">${index + 1}</span>
         <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || '未命名账号')}</b><i style="width:${width}%"></i></div>
-        <strong>${formatMoney(item.totalCostMinor)}</strong>
+        <strong>${formatMobileStatsMoney(item.totalCostMinor)}</strong>
         <em>${formatInteger(item.imageGenerated || 0)}张</em>
       </div>`;
   }).join('') : '<div class="mobile-stats-empty">近30天暂无账号消耗</div>';
@@ -641,7 +645,7 @@ function renderMobileStats() {
     <section class="mobile-stats-hero-card">
       <div>
         <span>近30天总消耗</span>
-        <strong>${formatMoney(d30Totals.totalCostMinor)}</strong>
+        <strong>${formatMobileStatsMoney(d30Totals.totalCostMinor)}</strong>
         <p>首次生图 ${formatInteger(d30Totals.imageGenerated || 0)} 张 · 重生成 ${formatInteger(d30Totals.imageRegenerated || 0)} 张</p>
       </div>
       <div class="mobile-stats-donut" style="--rate:${Math.round((Number(d30Totals.successRate) || 0) * 360)}deg">
@@ -660,7 +664,7 @@ function renderMobileStats() {
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
     <section class="mobile-stats-summary-strip">
-      <div><span>平均成本</span><b>${formatMoney(d30Totals.averageCostMinor)}</b></div>
+      <div><span>平均成本</span><b>${formatMobileStatsMoney(d30Totals.averageCostMinor)}</b></div>
       <div><span>总张数</span><b>${formatInteger(totalImages)}</b></div>
       <div><span>套图分析</span><b>${formatInteger(d30Totals.templateAnalysisFolders || 0)}</b></div>
     </section>`;

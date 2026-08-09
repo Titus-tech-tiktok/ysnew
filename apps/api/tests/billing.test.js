@@ -167,6 +167,7 @@ test('global stats exclude superadmin account usage', async t => {
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   await billing.saveRules({ enabled: true, imageFeeMinor: 100, llmFeeMinor: 20, defaultBalanceMinor: 1000 });
   await billing.commit(await billing.reserve('super-workspace', 'image', { description: '超级管理员生图' }));
+  await billing.commit(await billing.reserve('unknown-workspace', 'image', { description: '无法识别归属的系统生图' }));
   await billing.commit(await billing.reserve('member-workspace', 'image', { description: '成员生图' }));
   await billing.commit(await billing.reserve('member-workspace', 'llm', { description: '成员套图模板分析' }));
 
@@ -179,6 +180,26 @@ test('global stats exclude superadmin account usage', async t => {
   assert.equal(stats.totals.imageGenerated, 1);
   assert.equal(stats.totals.analysisCalls, 1);
   assert.equal(stats.totals.activeWorkspaces, 1);
+  assert.deepEqual(stats.byAccount.map(account => account.workspaceId), ['member-workspace']);
+});
+
+test('global stats only include successful model charges, not balance transfers', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await billing.saveRules({ enabled: true, imageFeeMinor: 100, llmFeeMinor: 20, defaultBalanceMinor: 1000 });
+  await billing.adjustBalance('admin-workspace', 1000, { operatorUserId: 'root' });
+  await billing.transferBalance('admin-workspace', 'member-workspace', 400, { operatorUserId: 'manager' });
+  await billing.commit(await billing.reserve('member-workspace', 'image', { description: '成员生图' }));
+
+  const stats = await billing.getGlobalStats('today', new Map([
+    ['admin-workspace', { role: 'admin', username: 'manager' }],
+    ['member-workspace', { role: 'member', username: 'seller' }]
+  ]));
+
+  assert.equal(stats.totals.totalCostMinor, 100);
+  assert.equal(stats.totals.imageGenerated, 1);
+  assert.equal(stats.totals.activeWorkspaces, 1);
+  assert.deepEqual(stats.byOperation.map(item => item.key), ['generation']);
   assert.deepEqual(stats.byAccount.map(account => account.workspaceId), ['member-workspace']);
 });
 
