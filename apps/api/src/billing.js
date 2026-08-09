@@ -272,12 +272,16 @@ function createBillingService(dataRoot) {
       try { entry = JSON.parse(line); } catch { continue; }
       const created = new Date(entry.createdAt).getTime();
       if (!Number.isFinite(created) || created < windowRange.startMs || created >= windowRange.endMs) continue;
+      if (!BILLING_TYPES.has(String(entry.kind || ''))) continue;
+      const workspaceId = String(entry.workspaceId || '');
+      const user = userLookup.get(workspaceId);
+      if (!user || !['admin', 'member'].includes(String(user.role || ''))) continue;
       const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
       const amountMinor = sourceScale === BILLING_SCALE ? Math.trunc(Number(entry.amountMinor) || 0) : migrateMoney(entry.amountMinor, sourceScale);
-      const spendMinor = amountMinor < 0 ? Math.abs(amountMinor) : 0;
+      if (amountMinor >= 0) continue;
+      const spendMinor = Math.abs(amountMinor);
       const bucket = operationBucket(entry);
-      const workspaceId = String(entry.workspaceId || '');
-      if (spendMinor > 0) totals.totalCostMinor += spendMinor;
+      totals.totalCostMinor += spendMinor;
       if (workspaceId) totals.activeWorkspaces.add(workspaceId);
       if (bucket === 'generation') totals.imageGenerated += 1;
       if (bucket === 'regeneration') totals.imageRegenerated += 1;
@@ -289,7 +293,6 @@ function createBillingService(dataRoot) {
         const referenceRoot = String(entry.reference || '').split(/[\\/]/).filter(Boolean)[0] || '';
         templateAnalysisGroups.add(`${workspaceId}|${new Date(created).toISOString().slice(0, 10)}|${referenceRoot || 'default'}`);
       }
-      const user = userLookup.get(workspaceId) || {};
       const account = byAccount.get(workspaceId) || {
         workspaceId,
         username: user.username || workspaceId || 'unknown',
@@ -298,11 +301,15 @@ function createBillingService(dataRoot) {
         totalCostMinor: 0,
         imageGenerated: 0,
         imageRegenerated: 0,
+        masterGenerated: 0,
+        freeGenerated: 0,
         analysisCalls: 0
       };
       account.totalCostMinor += spendMinor;
       if (bucket === 'generation') account.imageGenerated += 1;
       if (bucket === 'regeneration') account.imageRegenerated += 1;
+      if (bucket === 'master') account.masterGenerated += 1;
+      if (bucket === 'free') account.freeGenerated += 1;
       if (entry.kind === 'llm') account.analysisCalls += 1;
       byAccount.set(workspaceId, account);
       const operation = byOperation.get(bucket) || { key: bucket, count: 0, totalCostMinor: 0 };
@@ -315,19 +322,48 @@ function createBillingService(dataRoot) {
       point.costMinor += spendMinor;
       trend.set(hour, point);
     }
-    const deliveredImages = totals.imageGenerated + totals.masterGenerated + totals.freeGenerated;
-    const firstPassImages = Math.max(0, totals.imageGenerated - totals.imageRegenerated);
-    const successRate = totals.imageGenerated > 0 ? firstPassImages / totals.imageGenerated : 0;
-    const averageCostMinor = deliveredImages > 0 ? Math.round(totals.totalCostMinor / deliveredImages) : 0;
-    const decorateAccount = account => ({
-      ...account,
-      successRate: account.imageGenerated > 0
-        ? Math.max(0, account.imageGenerated - account.imageRegenerated) / account.imageGenerated
-        : 0,
-      averageCostMinor: account.imageGenerated > 0
-        ? Math.round(account.totalCostMinor / account.imageGenerated)
-        : 0
-    });
+    const generatedImages = totals.imageGenerated + totals.imageRegenerated + totals.masterGenerated + totals.freeGenerated;
+    const firstPassImages = totals.imageGenerated;
+    const retryAttempts = totals.imageGenerated + totals.imageRegenerated;
+    const successRate = retryAttempts > 0 ? firstPassImages / retryAttempts : 0;
+    const averageCostMinor = generatedImages > 0 ? Math.round(totals.totalCostMinor / generatedImages) : 0;
+    const decorateAccount = account => {
+      const generated = account.imageGenerated + account.imageRegenerated + account.masterGenerated + account.freeGenerated;
+      const attempts = account.imageGenerated + account.imageRegenerated;
+      return {
+        ...account,
+        successRate: attempts > 0 ? account.imageGenerated / attempts : 0,
+        averageCostMinor: generated > 0 ? Math.round(account.totalCostMinor / generated) : 0
+      };
+    };
+    const accountState = await readAccounts();
+    const balanceByAccount = [];
+    const balanceByRole = new Map();
+    for (const [workspaceId, value] of Object.entries(accountState.accounts)) {
+      const user = userLookup.get(workspaceId);
+      if (!user || !['admin', 'member'].includes(String(user.role || ''))) continue;
+      const account = publicAccount(workspaceId, normalizeAccount(value, 0));
+      const role = String(user?.role || 'unknown');
+      const item = {
+        ...account,
+        username: user?.username || workspaceId,
+        displayName: user?.displayName || user?.username || workspaceId,
+        role
+      };
+      balanceByAccount.push(item);
+      const roleTotals = balanceByRole.get(role) || { role, count: 0, balanceMinor: 0, reservedMinor: 0, availableMinor: 0 };
+      roleTotals.count += 1;
+      roleTotals.balanceMinor += account.balanceMinor;
+      roleTotals.reservedMinor += account.reservedMinor;
+      roleTotals.availableMinor += account.availableMinor;
+      balanceByRole.set(role, roleTotals);
+    }
+    const balanceTotals = balanceByAccount.reduce((result, account) => ({
+      count: result.count + 1,
+      balanceMinor: result.balanceMinor + account.balanceMinor,
+      reservedMinor: result.reservedMinor + account.reservedMinor,
+      availableMinor: result.availableMinor + account.availableMinor
+    }), { count: 0, balanceMinor: 0, reservedMinor: 0, availableMinor: 0 });
     return {
       range: windowRange.range,
       startedAt: new Date(windowRange.startMs).toISOString(),
@@ -349,7 +385,12 @@ function createBillingService(dataRoot) {
       },
       byAccount: [...byAccount.values()].map(decorateAccount).sort((a, b) => b.totalCostMinor - a.totalCostMinor),
       byOperation: [...byOperation.values()].sort((a, b) => b.totalCostMinor - a.totalCostMinor),
-      trend: [...trend.values()].sort((a, b) => a.time.localeCompare(b.time))
+      trend: [...trend.values()].sort((a, b) => a.time.localeCompare(b.time)),
+      balanceSummary: {
+        totals: balanceTotals,
+        byRole: [...balanceByRole.values()].sort((a, b) => a.role.localeCompare(b.role)),
+        byAccount: balanceByAccount.sort((a, b) => a.workspaceId.localeCompare(b.workspaceId))
+      }
     };
   }
 
