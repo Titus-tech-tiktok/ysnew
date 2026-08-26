@@ -87,3 +87,20 @@ test('管理员线路选择和侧边栏不公开中转站单价', async () => {
   assert.match(adminChoices, /item\.description \|\| '可用中转站'/);
   assert.doesNotMatch(adminChoices, /feeRangeLabel|\/张/);
 });
+
+test('管理员费用流水支持全团队汇总、账号筛选和日期统计', async () => {
+  const [html, renderer, bridge, styles] = await Promise.all([
+    fs.readFile(path.join(webRoot, 'index.html'), 'utf8'),
+    fs.readFile(path.join(webRoot, 'src/renderer.js'), 'utf8'),
+    fs.readFile(path.join(webRoot, 'src/api-bridge.js'), 'utf8'),
+    fs.readFile(path.join(webRoot, 'src/styles.css'), 'utf8')
+  ]);
+  assert.match(html, /id="billingDetailUserFilter"/);
+  assert.match(html, /id="billingDetailRangeFilter"/);
+  assert.match(html, /今天[\s\S]*昨天[\s\S]*近 7 日[\s\S]*本月[\s\S]*自定义日期/);
+  assert.match(renderer, /全团队（合并流水）/);
+  assert.match(renderer, /生图消费[\s\S]*成功生成[\s\S]*平均成本[\s\S]*流水记录/);
+  assert.match(renderer, /renderBillingLedger\(transactions, userMap\)/);
+  assert.match(bridge, /getBillingDetail:[\s\S]*startDate[\s\S]*endDate/);
+  assert.match(styles, /\.billing-detail-filters[^}]*repeat\(3/);
+});

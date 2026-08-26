@@ -333,7 +333,16 @@ window.caishen = {
   requireAllPasswordChanges: () => authRequest('/api/auth/password-policy/require-all', { method: 'POST' }),
   deleteUser: id => authRequest(`/api/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getBillingSummary: (days, relayId = '') => authRequest(`/api/billing/me?days=${encodeURIComponent(Math.max(1, Math.trunc(Number(days) || 30)))}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}`),
-  getBillingDetail: (days, relayId = '', userId = '') => authRequest(`/api/billing/detail?days=${encodeURIComponent(Math.max(1, Math.trunc(Number(days) || 30)))}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}${userId ? `&userId=${encodeURIComponent(userId)}` : ''}`),
+  getBillingDetail: (options = {}) => {
+    const query = new URLSearchParams({
+      range: String(options.range || 'today'),
+      relayId: String(options.relayId || 'all'),
+      userId: String(options.userId || '')
+    });
+    if (options.startDate) query.set('startDate', String(options.startDate));
+    if (options.endDate) query.set('endDate', String(options.endDate));
+    return authRequest(`/api/billing/detail?${query.toString()}`);
+  },
   getBillingAdmin: () => authRequest('/api/billing/admin'),
   getAlipayConfig: () => authRequest('/api/alipay/config'),
   getAlipayRecharges: () => authRequest('/api/alipay/recharges'),

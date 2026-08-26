@@ -112,6 +112,9 @@ const state = {
   billingDetailSummary: null,
   billingDetailRelayId: '',
   billingDetailUserId: '',
+  billingDetailRange: 'today',
+  billingDetailStartDate: '',
+  billingDetailEndDate: '',
   billingAdmin: null,
   billingAdminFilter: '',
   billingAdminRelayId: '',
@@ -1008,16 +1011,26 @@ function renderBillingLedger(entries = [], userMap = new Map()) {
   }).join('');
 }
 
-function renderBillingSpendTotals(summary) {
-  const totals = summary?.spendTotals || {};
-  const customDays = Math.max(1, Math.min(3660, Number(summary?.customSpendDays || state.billingCustomDays) || 30));
-  const customValue = totals[String(customDays)] ?? totals[customDays] ?? 0;
+function renderBillingDetailMetrics(summary) {
+  const metrics = summary?.metrics || {};
   return [
-    `<div class="billing-rate-item"><span>今日费用</span><b>${formatMoney(totals['1'] || 0)}</b></div>`,
-    `<div class="billing-rate-item"><span>7日费用</span><b>${formatMoney(totals['7'] || 0)}</b></div>`,
-    `<div class="billing-rate-item"><span>30天费用</span><b>${formatMoney(totals['30'] || 0)}</b></div>`,
-    `<label class="billing-rate-item billing-custom-days"><span>自定义时长费用</span><div><input id="billingCustomDaysInput" type="number" min="1" max="3660" step="1" value="${customDays}" aria-label="自定义统计天数"><em>天</em></div><b>${formatMoney(customValue)}</b></label>`
+    `<div class="billing-rate-item billing-metric-primary"><span>生图消费</span><b>${formatMoney(metrics.imageSpendMinor || 0)}</b><small>所选范围实际扣费</small></div>`,
+    `<div class="billing-rate-item"><span>成功生成</span><b>${Number(metrics.imageCount || 0).toLocaleString('zh-CN')} 张</b><small>仅统计成功生图</small></div>`,
+    `<div class="billing-rate-item"><span>平均成本</span><b>${formatMoney(metrics.averageImageCostMinor || 0)}</b><small>消费金额 ÷ 成功张数</small></div>`,
+    `<div class="billing-rate-item"><span>流水记录</span><b>${Number(metrics.transactionCount || 0).toLocaleString('zh-CN')} 条</b><small>${Number(metrics.activeUserCount || 0).toLocaleString('zh-CN')} 个账号有变动</small></div>`
   ].join('');
+}
+
+function billingRangeLabel(summary) {
+  const labels = { today: '今天', yesterday: '昨天', '7d': '近 7 日', month: '本月', custom: '自定义日期' };
+  const range = labels[summary?.range] || '所选日期';
+  return summary?.range === 'custom' ? `${summary.startDate || ''} 至 ${summary.endDate || ''}` : range;
+}
+
+function chinaDateToday() {
+  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function renderBillingSummary() {
@@ -1038,21 +1051,25 @@ function renderBillingDetail() {
   const viewedUser = summary.viewedUser || state.currentUser || {};
   const visibleUsers = summary.users || [viewedUser];
   const transactions = summary.transactions || [];
-  $('#billingDetailSummary').textContent = `${viewedUser.displayName || viewedUser.username || '当前账号'} · ${relay.name || '当前服务'} · ${transactions.length} 条流水`;
+  const viewedName = viewedUser.id === 'team' ? '全团队' : (viewedUser.displayName || viewedUser.username || '当前账号');
+  const relayName = summary.relayId === 'all' ? '全部服务' : (relay.name || '当前服务');
+  const shownCount = transactions.length;
+  const totalCount = Number(summary.metrics?.transactionCount || shownCount);
+  $('#billingDetailSummary').textContent = `${viewedName} · ${relayName} · ${billingRangeLabel(summary)} · ${totalCount.toLocaleString('zh-CN')} 条流水${summary.truncated ? `（显示最新 ${shownCount} 条）` : ''}`;
   const filters = $('#billingDetailFilters');
-  filters.hidden = state.currentUser?.role === 'member' && visibleUsers.length < 2;
-  $('#billingDetailUserFilter').innerHTML = visibleUsers.map(user => `<option value="${escapeHtml(user.id)}"${user.id === viewedUser.id ? ' selected' : ''}>${escapeHtml(user.displayName || user.username)} · ${escapeHtml(user.username)}</option>`).join('');
-  $('#billingDetailRelayFilter').innerHTML = relays.map(item => `<option value="${escapeHtml(item.id)}"${item.id === summary.relayId ? ' selected' : ''}>${escapeHtml(item.name)}</option>`).join('');
-  $('#billingDetailRates').innerHTML = renderBillingSpendTotals(summary);
+  filters.hidden = false;
+  const teamOption = state.currentUser?.role === 'member' ? '' : `<option value="team"${viewedUser.id === 'team' ? ' selected' : ''}>全团队（合并流水）</option>`;
+  $('#billingDetailUserFilter').innerHTML = teamOption + visibleUsers.map(user => `<option value="${escapeHtml(user.id)}"${user.id === viewedUser.id ? ' selected' : ''}>${escapeHtml(user.displayName || user.username)} · ${escapeHtml(user.username)}</option>`).join('');
+  $('#billingDetailRelayFilter').innerHTML = `<option value="all"${summary.relayId === 'all' ? ' selected' : ''}>全部服务</option>` + relays.map(item => `<option value="${escapeHtml(item.id)}"${item.id === summary.relayId ? ' selected' : ''}>${escapeHtml(item.name)}</option>`).join('');
+  $('#billingDetailRangeFilter').value = summary.range || state.billingDetailRange;
+  const customRange = $('#billingDetailCustomRange');
+  customRange.hidden = (summary.range || state.billingDetailRange) !== 'custom';
+  $('#billingDetailStartDate').value = state.billingDetailStartDate || summary.startDate || chinaDateToday();
+  $('#billingDetailEndDate').value = state.billingDetailEndDate || summary.endDate || chinaDateToday();
+  $('#billingDetailRates').innerHTML = renderBillingDetailMetrics(summary);
   $('#billingDetailRates').hidden = false;
-  $('#billingDetailList').innerHTML = renderBillingLedger(transactions);
-  const customInput = $('#billingCustomDaysInput');
-  if (customInput) {
-    customInput.onchange = async () => {
-      state.billingCustomDays = Math.max(1, Math.min(3660, Number(customInput.value) || 30));
-      await loadBillingDetail(summary.relayId, viewedUser.id);
-    };
-  }
+  const userMap = new Map(visibleUsers.map(user => [user.workspaceId, user]));
+  $('#billingDetailList').innerHTML = renderBillingLedger(transactions, userMap);
 }
 
 async function loadBillingSummary() {
@@ -1068,15 +1085,24 @@ async function loadBillingSummary() {
 async function openBillingDetail() {
   $('#billingDetailModal').hidden = false;
   await loadBillingSummary();
-  state.billingDetailUserId = state.currentUser?.id || '';
-  await loadBillingDetail(state.billingSummary?.relayId, state.billingDetailUserId);
+  state.billingDetailUserId = state.currentUser?.role === 'member' ? (state.currentUser?.id || '') : 'team';
+  state.billingDetailRelayId = 'all';
+  state.billingDetailRange = 'today';
+  await loadBillingDetail('all', state.billingDetailUserId);
 }
 
 async function loadBillingDetail(relayId, userId = state.billingDetailUserId || state.currentUser?.id || '') {
   try {
-    state.billingDetailSummary = await window.caishen.getBillingDetail(state.billingCustomDays, relayId || '', userId);
+    state.billingDetailSummary = await window.caishen.getBillingDetail({
+      relayId: relayId || state.billingDetailRelayId || 'all',
+      userId,
+      range: state.billingDetailRange,
+      startDate: state.billingDetailRange === 'custom' ? state.billingDetailStartDate : '',
+      endDate: state.billingDetailRange === 'custom' ? state.billingDetailEndDate : ''
+    });
     state.billingDetailRelayId = state.billingDetailSummary.relayId || '';
     state.billingDetailUserId = state.billingDetailSummary.viewedUser?.id || userId;
+    state.billingDetailRange = state.billingDetailSummary.range || state.billingDetailRange;
     renderBillingDetail();
   } catch (error) { toast(errorText(error), true); }
 }
@@ -5430,6 +5456,19 @@ function bindEvents() {
   $('#refreshBillingDetailButton').onclick = () => loadBillingDetail(state.billingDetailRelayId, state.billingDetailUserId);
   $('#billingDetailUserFilter').onchange = event => loadBillingDetail(state.billingDetailRelayId, event.target.value);
   $('#billingDetailRelayFilter').onchange = event => loadBillingDetail(event.target.value, state.billingDetailUserId);
+  $('#billingDetailRangeFilter').onchange = event => {
+    state.billingDetailRange = String(event.target.value || 'today');
+    if (state.billingDetailRange === 'custom') {
+      state.billingDetailStartDate ||= chinaDateToday();
+      state.billingDetailEndDate ||= chinaDateToday();
+    }
+    loadBillingDetail(state.billingDetailRelayId, state.billingDetailUserId);
+  };
+  $('#applyBillingDetailDateButton').onclick = () => {
+    state.billingDetailStartDate = $('#billingDetailStartDate').value;
+    state.billingDetailEndDate = $('#billingDetailEndDate').value;
+    loadBillingDetail(state.billingDetailRelayId, state.billingDetailUserId);
+  };
   $('#billingDetailModal').onclick = event => { if (event.target === $('#billingDetailModal')) closeBillingDetail(); };
   $('#saveBillingRulesButton').onclick = saveBillingRules;
   $('#refreshBillingButton').onclick = loadBillingAdmin;

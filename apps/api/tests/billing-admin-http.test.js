@@ -307,6 +307,28 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
     assert.equal(accounting.body.data.totals.operatingExpensesCnyMinor, 1234);
     assert.equal(accounting.body.data.totals.totalExpensesCnyMinor, 1234);
     assert.equal(accounting.body.data.totals.netProfitCnyMinor, -732);
+
+    const runtime = require('../src/runtime');
+    await runtime.billing.saveRules({ enabled: true });
+    await runtime.billing.commit(await runtime.billing.reserve(member.workspaceId, 'image', {
+      relayId: 'relay-one', amountMinor: 100, description: '员工成功生图'
+    }));
+    await runtime.billing.commit(await runtime.billing.reserve(secondMember.workspaceId, 'image', {
+      relayId: 'relay-one', amountMinor: 20, description: '设计师成功生图'
+    }));
+    const teamDetailForAdmin = await jsonFetch(`${base}/api/billing/detail?userId=team&relayId=all&range=today`, {
+      headers: { Cookie: adminCookie }
+    });
+    assert.equal(teamDetailForAdmin.response.status, 200);
+    assert.equal(teamDetailForAdmin.body.data.viewedUser.id, 'team');
+    assert.equal(teamDetailForAdmin.body.data.relayId, 'all');
+    assert.equal(teamDetailForAdmin.body.data.metrics.imageSpendMinor, 120);
+    assert.equal(teamDetailForAdmin.body.data.metrics.imageCount, 2);
+    assert.equal(teamDetailForAdmin.body.data.metrics.averageImageCostMinor, 60);
+    assert.deepEqual(
+      [...new Set(teamDetailForAdmin.body.data.transactions.filter(entry => entry.kind === 'image').map(entry => entry.workspaceId))].sort(),
+      [member.workspaceId, secondMember.workspaceId].sort()
+    );
   } finally {
     await new Promise(resolve => server.close(resolve));
     await removeTempWithRetry(temp);

@@ -169,6 +169,35 @@ test('spend totals only include successful model charges', async t => {
   assert.equal(summary.spendTotals['30'], 120);
 });
 
+test('team ledger report merges selected accounts and calculates image metrics in Beijing date range', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await billing.saveRules({ enabled: true });
+  await billing.adjustBalance('team-admin', RELAY_ID, 1000);
+  await billing.adjustBalance('team-member', RELAY_ID, 1000);
+  await billing.adjustBalance('outside-member', RELAY_ID, 1000);
+  await billing.commit(await billing.reserve('team-admin', 'image', { relayId: RELAY_ID, amountMinor: 100, description: '管理员生图' }));
+  await billing.commit(await billing.reserve('team-member', 'image', { relayId: RELAY_ID, amountMinor: 300, description: '员工生图' }));
+  await billing.commit(await billing.reserve('outside-member', 'image', { relayId: RELAY_ID, amountMinor: 900, description: '其他团队生图' }));
+  const ledgerFile = path.join(root, 'system', 'billing-ledger.jsonl');
+  const entries = (await fs.readFile(ledgerFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  for (const entry of entries) entry.createdAt = '2026-08-27T04:00:00.000Z';
+  await fs.writeFile(ledgerFile, `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
+
+  const report = await billing.getLedgerReport(new Map([
+    ['team-admin', { username: 'admin' }],
+    ['team-member', { username: 'member' }]
+  ]), { range: 'custom', startDate: '2026-08-27', endDate: '2026-08-27', relayId: RELAY_ID });
+
+  assert.equal(report.metrics.imageSpendMinor, 400);
+  assert.equal(report.metrics.imageCount, 2);
+  assert.equal(report.metrics.averageImageCostMinor, 200);
+  assert.equal(report.metrics.activeUserCount, 2);
+  assert.equal(report.transactions.some(entry => entry.workspaceId === 'outside-member'), false);
+  assert.equal(report.startDate, '2026-08-27');
+  assert.equal(report.endDate, '2026-08-27');
+});
+
 test('global stats exclude superadmin account usage', async t => {
   const { root, billing } = await fixture();
   t.after(() => fs.rm(root, { recursive: true, force: true }));

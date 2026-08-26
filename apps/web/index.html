@@ -268,7 +268,8 @@
   <div class="modal-backdrop" id="billingDetailModal" hidden>
     <section class="modal-card billing-detail-modal" role="dialog" aria-modal="true" aria-labelledby="billingDetailTitle">
       <div class="modal-head"><div><span class="eyebrow">ACCOUNT BILLING</span><h2 id="billingDetailTitle">费用流水</h2><p id="billingDetailSummary">选择账号和服务查看费用流水。</p></div><button class="icon-button" id="closeBillingDetailButton" aria-label="关闭">×</button></div>
-      <div class="billing-detail-filters" id="billingDetailFilters" hidden><label>查看账号<select id="billingDetailUserFilter"></select></label><label>服务账户<select id="billingDetailRelayFilter"></select></label></div>
+      <div class="billing-detail-filters" id="billingDetailFilters" hidden><label>查看范围<select id="billingDetailUserFilter"></select></label><label>服务账户<select id="billingDetailRelayFilter"></select></label><label>统计日期<select id="billingDetailRangeFilter"><option value="today">今天</option><option value="yesterday">昨天</option><option value="7d">近 7 日</option><option value="month">本月</option><option value="custom">自定义日期</option></select></label></div>
+      <div class="billing-detail-custom-range" id="billingDetailCustomRange" hidden><label>开始日期<input id="billingDetailStartDate" type="date"></label><span>至</span><label>结束日期<input id="billingDetailEndDate" type="date"></label><button class="secondary" id="applyBillingDetailDateButton" type="button">查询</button></div>
       <div class="billing-detail-rates" id="billingDetailRates"></div>
       <div class="billing-ledger-list billing-detail-list" id="billingDetailList"><div class="empty-inline">正在读取费用明细…</div></div>
       <div class="modal-foot"><span>只有成功的模型调用会扣费。</span><div><button class="secondary" id="refreshBillingDetailButton" type="button">刷新</button></div></div>

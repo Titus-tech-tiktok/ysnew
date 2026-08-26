@@ -329,10 +329,16 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .billing-ledger-amount { font-size: 12px; font-weight: 800; white-space: nowrap; }
 .billing-ledger-amount.debit { color: var(--red); }
 .billing-ledger-amount.credit { color: var(--teal); }
-.billing-detail-modal { width: min(720px, calc(100vw - 32px)); height: min(720px, calc(100vh - 32px)); }
-.billing-detail-filters { padding: 12px 20px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; background: var(--paper); }
+.billing-detail-modal { width: min(980px, calc(100vw - 32px)); height: min(780px, calc(100vh - 32px)); }
+.billing-detail-filters { padding: 14px 20px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; background: var(--paper); }
 .billing-detail-filters label { display: grid; gap: 5px; color: var(--subtle); font-size: 9px; font-weight: 700; }
 .billing-detail-filters select { min-width: 0; min-height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: var(--paper); color: var(--ink); font-weight: 700; }
+.billing-detail-custom-range { padding: 10px 20px; border-bottom: 1px solid var(--line); background: #fdfcf9; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: end; gap: 10px; }
+.billing-detail-custom-range[hidden] { display: none; }
+.billing-detail-custom-range label { color: var(--subtle); font-size: 9px; font-weight: 700; display: grid; gap: 5px; }
+.billing-detail-custom-range input { min-height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; background: var(--paper); color: var(--ink); }
+.billing-detail-custom-range > span { color: var(--subtle); padding-bottom: 11px; font-size: 10px; }
+.billing-detail-custom-range button { min-height: 38px; padding-inline: 22px; }
 .change-password-modal { width: min(520px, calc(100vw - 32px)); }
 .change-password-form { padding: 18px 20px; display: grid; gap: 13px; }
 .change-password-form label { color: var(--muted); font-size: 11px; font-weight: 700; display: grid; gap: 7px; }
@@ -341,11 +347,13 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 #changePasswordStatus.saved { color: var(--teal); }
 #changePasswordStatus.error { color: var(--red); }
 .billing-detail-rates { padding: 15px 20px; border-bottom: 1px solid var(--line); background: var(--panel); display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.billing-rate-item { padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.billing-rate-item { padding: 12px 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); min-width: 0; }
+.billing-rate-item.billing-metric-primary { border-color: #2f7f78; background: var(--teal-soft); }
 .billing-rate-item.active { border-color: var(--teal); background: var(--teal-soft); }
-.billing-rate-item span, .billing-rate-item b { display: block; }
+.billing-rate-item span, .billing-rate-item b, .billing-rate-item small { display: block; }
 .billing-rate-item span { color: var(--subtle); font-size: 9px; }
-.billing-rate-item b { margin-top: 4px; font-size: 15px; }
+.billing-rate-item b { margin-top: 5px; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.billing-rate-item small { margin-top: 5px; color: var(--subtle); font-size: 8px; line-height: 1.4; }
 .billing-custom-days div { margin-top: 6px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; }
 .billing-custom-days input { min-height: 30px; padding: 0 8px; border-radius: 6px; font-size: 11px; }
 .billing-custom-days em { color: var(--subtle); font-style: normal; font-size: 10px; }
@@ -356,8 +364,13 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 }
 
 @media (max-width: 640px) {
-  .billing-price-grid, .billing-detail-rates { grid-template-columns: 1fr; }
+  .billing-price-grid { grid-template-columns: 1fr; }
+  .billing-detail-rates { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 14px; }
   .billing-detail-filters { grid-template-columns: 1fr; }
+  .billing-detail-custom-range { grid-template-columns: 1fr; padding: 12px 14px; }
+  .billing-detail-custom-range > span { display: none; }
+  .billing-detail-modal { width: calc(100vw - 20px); height: calc(100vh - 20px); }
+  .billing-detail-list { padding-inline: 14px; }
   .billing-price-grid label:last-child { grid-column: auto; }
 }
 

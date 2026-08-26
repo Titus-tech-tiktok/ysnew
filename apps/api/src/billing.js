@@ -304,7 +304,10 @@ function createBillingService(dataRoot) {
     let startMs = todayStartMs;
     let endMs = nowMs;
     let normalizedRange = range;
-    if (range === '7d') startMs = todayStartMs - 6 * dayMs;
+    if (range === 'yesterday') {
+      startMs = todayStartMs - dayMs;
+      endMs = todayStartMs;
+    } else if (range === '7d') startMs = todayStartMs - 6 * dayMs;
     else if (range === 'month') {
       const chinaNow = new Date(nowMs + chinaOffsetMs);
       startMs = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), 1) - chinaOffsetMs;
@@ -329,6 +332,72 @@ function createBillingService(dataRoot) {
       endMs,
       startDate: chinaDate(startMs),
       endDate: chinaDate(Math.max(startMs, endMs - 1))
+    };
+  }
+
+  async function getLedgerReport(userLookup = new Map(), options = {}) {
+    const windowRange = accountingWindowRange({
+      range: options.range || 'today',
+      startDate: options.startDate,
+      endDate: options.endDate
+    });
+    const requestedRelayId = String(options.relayId || '').trim();
+    const relayId = requestedRelayId ? normalizeRelayId(requestedRelayId) : '';
+    const limit = Math.max(1, Math.min(500, Math.trunc(Number(options.limit) || 500)));
+    let text = '';
+    try { text = await fs.readFile(ledgerFile, 'utf8'); } catch { text = ''; }
+    const transactions = [];
+    const activeWorkspaces = new Set();
+    let transactionCount = 0;
+    let imageSpendMinor = 0;
+    let imageCount = 0;
+    for (const line of text.trim().split('\n').filter(Boolean)) {
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      const workspaceId = String(entry.workspaceId || '');
+      if (!userLookup.has(workspaceId)) continue;
+      const entryRelayId = String(entry.relayId || legacyRelayId);
+      if (relayId && entryRelayId !== relayId) continue;
+      const created = new Date(entry.createdAt).getTime();
+      if (!Number.isFinite(created) || created < windowRange.startMs || created >= windowRange.endMs) continue;
+      const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
+      const amountMinor = sourceScale === BILLING_SCALE
+        ? Math.trunc(Number(entry.amountMinor) || 0)
+        : migrateMoney(entry.amountMinor, sourceScale);
+      transactionCount += 1;
+      activeWorkspaces.add(workspaceId);
+      if (entry.kind === 'image' && amountMinor < 0) {
+        imageSpendMinor += Math.abs(amountMinor);
+        imageCount += 1;
+      }
+      transactions.push({
+        ...entry,
+        relayId: entryRelayId,
+        currency: BILLING_CURRENCY,
+        amountScale: BILLING_SCALE,
+        amountMinor,
+        balanceMinor: sourceScale === BILLING_SCALE
+          ? Math.trunc(Number(entry.balanceMinor) || 0)
+          : migrateMoney(entry.balanceMinor, sourceScale)
+      });
+    }
+    transactions.reverse();
+    return {
+      relayId,
+      range: windowRange.range,
+      startDate: windowRange.startDate,
+      endDate: windowRange.endDate,
+      startedAt: new Date(windowRange.startMs).toISOString(),
+      endedAt: new Date(windowRange.endMs).toISOString(),
+      metrics: {
+        imageSpendMinor,
+        imageCount,
+        averageImageCostMinor: imageCount ? Math.round(imageSpendMinor / imageCount) : 0,
+        transactionCount,
+        activeUserCount: activeWorkspaces.size
+      },
+      transactions: transactions.slice(0, limit),
+      truncated: transactions.length > limit
     };
   }
 
@@ -989,6 +1058,7 @@ function createBillingService(dataRoot) {
     ensureAccount,
     getAccountingReport,
     getGlobalStats,
+    getLedgerReport,
     getRelayUsageState,
     getRules: readRules,
     getSummary,
