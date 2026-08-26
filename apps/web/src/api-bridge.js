@@ -368,6 +368,17 @@ window.caishen = {
     if (options.endDate) query.set('endDate', options.endDate);
     return authRequest(`/api/billing/accounting?${query}`);
   },
+  getBusinessHubOverview: (options = {}) => {
+    const query = new URLSearchParams();
+    query.set('range', options.range || 'month');
+    if (options.startDate) query.set('startDate', options.startDate);
+    if (options.endDate) query.set('endDate', options.endDate);
+    return authRequest(`/api/business-hub/overview?${query}`);
+  },
+  reviewBusinessRecharge: payload => authRequest('/api/business-hub/recharge-action', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
   getGlobalStats: (range, relayId = '') => authRequest(`/api/billing/global-stats?range=${encodeURIComponent(range || 'today')}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}`),
   getFinanceLedger: month => authRequest(`/api/finance/ledger?month=${encodeURIComponent(month || '')}`),
   createFinanceEntry: payload => authRequest('/api/finance/entries', { method: 'POST', body: JSON.stringify(payload) }),

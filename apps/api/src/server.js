@@ -12,6 +12,8 @@ const sharp = require('sharp');
 const runtime = require('./runtime');
 const { createAuthService } = require('./auth');
 const { createAlipayRechargeService } = require('./alipay-recharge');
+const { requestBusiness, sealBusinessData, verifyBusinessRequest } = require('./business-link');
+const { createBusinessSnapshotService } = require('./business-snapshot');
 const { metadataPaths, normalizeSourceMetadata } = require('./core/review-engine');
 const { isSameOrChildPath } = require('./core/path-utils');
 
@@ -19,6 +21,14 @@ const PORT = Math.max(1, Number(process.env.PORT || 8788));
 const HOST = String(process.env.CAISHEN_HOST || '127.0.0.1');
 const auth = createAuthService(runtime.DATA_ROOT);
 const alipayRecharge = createAlipayRechargeService(runtime.DATA_ROOT, runtime.billing);
+const businessSnapshot = createBusinessSnapshotService({
+  auth,
+  runtime,
+  alipayRecharge,
+  businessId: 'yongsha',
+  businessName: '永沙'
+});
+const DUOXI_BUSINESS_URL = String(process.env.CAISHEN_DUOXI_BUSINESS_URL || '').trim().replace(/\/+$/, '');
 const tempRoot = () => path.join(runtime.WORKSPACE_ROOT, 'tmp');
 const assetRoot = () => path.join(runtime.WORKSPACE_ROOT, 'assets');
 const jobRoot = () => path.join(runtime.WORKSPACE_ROOT, 'jobs');
@@ -1027,6 +1037,40 @@ async function startServer() {
   }));
   app.use(express.json({ limit: '25mb' }));
 
+  app.post('/api/internal/business/snapshot', async (req, res) => {
+    const verification = verifyBusinessRequest(req);
+    if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
+    try {
+      return res.json({ data: sealBusinessData(await businessSnapshot.snapshot(req.body || {})) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/internal/business/recharge-action', async (req, res) => {
+    const verification = verifyBusinessRequest(req);
+    if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
+    try {
+      return res.json({ data: sealBusinessData(await businessSnapshot.rechargeAction(req.body || {}, 'business-link')) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/internal/business/alipay-config', async (req, res) => {
+    const verification = verifyBusinessRequest(req);
+    if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
+    try {
+      const settings = await alipayRecharge.getSettings();
+      const qrBase64 = settings.qrAvailable
+        ? (await fsp.readFile(alipayRecharge.qrFile)).toString('base64')
+        : '';
+      return res.json({ data: sealBusinessData({ ...settings, qrBase64, qrMimeType: 'image/png' }) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
   app.get('/api/health', (_req, res) => {
     const queue = runtime.getImageSchedulerSnapshot();
     return res.json({
@@ -1413,39 +1457,89 @@ async function startServer() {
   app.get('/api/billing/accounting', async (req, res) => {
     if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以查看经营账目' });
     try {
-      const [users, apiSettings] = await Promise.all([auth.listUsers(), runtime.loadApiSettings()]);
-      const userLookup = new Map(users.map(user => [user.workspaceId, user]));
-      const report = await runtime.billing.getAccountingReport(apiSettings.relays || [], userLookup, {
-        range: String(req.query.range || 'month'),
-        startDate: String(req.query.startDate || ''),
-        endDate: String(req.query.endDate || ''),
-        relayId: String(req.query.relayId || '')
-      });
-      const finance = await runtime.financeLedger.listRange({
-        startDate: report.startDate,
-        endDate: report.endDate,
-        relayId: report.relayId
-      });
-      const otherIncomeCnyMinor = Number(finance.summary.otherIncomeCnyMinor) || 0;
-      const customerTopupCnyMinor = Number(report.totals.customerTopupCnyMinor) || 0;
-      const businessRevenueCnyMinor = customerTopupCnyMinor + otherIncomeCnyMinor;
-      const operatingExpensesCnyMinor = Number(finance.summary.operatingExpensesCnyMinor) || 0;
-      const upstreamCostCnyMinor = Number(report.totals.upstreamCostCnyMinor) || 0;
-      const totalExpensesCnyMinor = upstreamCostCnyMinor + operatingExpensesCnyMinor;
-      return res.json({
-        data: {
-          ...report,
-          finance,
-          totals: {
-            ...report.totals,
-            otherIncomeCnyMinor,
-            businessRevenueCnyMinor,
-            operatingExpensesCnyMinor,
-            totalExpensesCnyMinor,
-            netProfitCnyMinor: businessRevenueCnyMinor - totalExpensesCnyMinor
-          }
+      return res.json({ data: await businessSnapshot.accounting(req.query || {}) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.get('/api/business-hub/overview', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权查看经营总览' });
+    const query = {
+      range: String(req.query.range || 'month'),
+      startDate: String(req.query.startDate || ''),
+      endDate: String(req.query.endDate || ''),
+      includeRecharges: req.query.includeRecharges !== '0'
+    };
+    const local = await businessSnapshot.snapshot(query);
+    const businesses = [{ ...local, available: true }];
+    if (DUOXI_BUSINESS_URL) {
+      try {
+        const remote = await requestBusiness(DUOXI_BUSINESS_URL, '/api/internal/business/snapshot', query);
+        businesses.push({ ...remote, available: true });
+      } catch (error) {
+        businesses.push({ id: 'duoxiluka', name: '多嘻噜卡科技', available: false, error: error?.message || String(error) });
+      }
+    } else {
+      businesses.push({ id: 'duoxiluka', name: '多嘻噜卡科技', available: false, error: '尚未配置业务数据连接' });
+    }
+    const available = businesses.filter(item => item.available);
+    const sum = key => available.reduce((total, item) => total + (Number(item.accounting?.totals?.[key]) || 0), 0);
+    return res.json({
+      data: {
+        generatedAt: new Date().toISOString(),
+        range: query.range,
+        businesses,
+        totals: {
+          businessRevenueCnyMinor: sum('businessRevenueCnyMinor'),
+          totalExpensesCnyMinor: sum('totalExpensesCnyMinor'),
+          netProfitCnyMinor: sum('netProfitCnyMinor'),
+          upstreamCostCnyMinor: sum('upstreamCostCnyMinor'),
+          operatingExpensesCnyMinor: sum('operatingExpensesCnyMinor'),
+          successfulImages: sum('successfulImages'),
+          upstreamRequestCount: available.reduce((total, item) => total + (Number(item.upstreamRequests?.count) || 0), 0)
+        },
+        recharges: businesses.flatMap(item => Array.isArray(item.recharges) ? item.recharges : [])
+          .sort((left, right) => String(right.submittedAt || '').localeCompare(String(left.submittedAt || '')))
+      }
+    });
+  });
+
+  app.post('/api/business-hub/recharge-action', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权处理到账核验' });
+    try {
+      const businessId = String(req.body?.businessId || '');
+      const payload = {
+        action: String(req.body?.action || ''),
+        id: String(req.body?.id || ''),
+        actualAmountUsd: req.body?.actualAmountUsd,
+        reason: req.body?.reason
+      };
+      if (payload.action === 'approve' && DUOXI_BUSINESS_URL) {
+        const [localOrders, remoteSnapshot] = await Promise.all([
+          alipayRecharge.listReview(),
+          requestBusiness(DUOXI_BUSINESS_URL, '/api/internal/business/snapshot', { range: 'today', includeRecharges: true })
+        ]);
+        const allOrders = [
+          ...localOrders.map(order => ({ ...order, businessId: 'yongsha' })),
+          ...(remoteSnapshot.recharges || []).map(order => ({ ...order, businessId: 'duoxiluka' }))
+        ];
+        const target = allOrders.find(order => order.businessId === businessId && order.id === payload.id);
+        if (!target) return res.status(404).json({ error: '充值记录不存在' });
+        const duplicate = allOrders.find(order => order.businessId !== businessId
+          && order.alipayOrderNo === target.alipayOrderNo
+          && order.status !== 'rejected');
+        if (duplicate) {
+          return res.status(409).json({ error: `订单号已在${duplicate.businessName || (duplicate.businessId === 'yongsha' ? '永沙' : '多嘻噜卡科技')}提交，请先核对并驳回其中一条，避免重复入账` });
         }
-      });
+      }
+      const data = businessId === 'yongsha'
+        ? await businessSnapshot.rechargeAction(payload, req.user.id)
+        : businessId === 'duoxiluka' && DUOXI_BUSINESS_URL
+          ? await requestBusiness(DUOXI_BUSINESS_URL, '/api/internal/business/recharge-action', payload)
+          : null;
+      if (!data) return res.status(400).json({ error: '业务账户不可用' });
+      return res.json({ data: { ...data, businessId } });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }

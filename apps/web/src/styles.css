@@ -8279,6 +8279,42 @@ label input, label textarea {
   padding: 0 14px 14px;
 }
 
+.mobile-finance-recharge-list {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 16px;
+}
+
+.mobile-finance-recharge {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, .35fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(203, 211, 205, .8);
+  border-radius: 14px;
+  background: #fbfcfb;
+}
+
+.mobile-finance-recharge > div:first-child,
+.mobile-finance-recharge label {
+  display: grid;
+  gap: 5px;
+}
+
+.mobile-finance-recharge b,
+.mobile-finance-recharge strong { color: var(--navy); }
+.mobile-finance-recharge span,
+.mobile-finance-recharge small,
+.mobile-finance-recharge label { color: var(--muted); font-size: 11px; }
+.mobile-finance-recharge input { min-height: 38px; }
+.mobile-finance-recharge.approved { border-color: rgba(45, 125, 111, .35); background: rgba(45, 125, 111, .04); }
+.mobile-finance-recharge.rejected { opacity: .72; }
+
+@media (max-width: 760px) {
+  .mobile-finance-recharge { grid-template-columns: 1fr; align-items: stretch; }
+}
+
 .mobile-finance-entry {
   width: 100%;
   display: grid;

@@ -12,11 +12,11 @@ test('mobile finance ledger stays collapsed until More is selected', async () =>
   assert.match(renderer, /if \(!state\.mobileFinanceExpanded\) return ''/);
 });
 
-test('mobile finance ledger uses Chinese labels and independent finance APIs', async () => {
+test('mobile finance ledger combines both businesses and keeps finance editing isolated', async () => {
   const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
   const bridge = await fs.readFile(path.join(__dirname, '../../web/src/api-bridge.js'), 'utf8');
 
-  for (const label of ['经营账本', '营业收入', '总支出', '预估利润', '今天', '近 7 天', '本月', '上月', '自定义日期', '全部中转站', '收支流水', '收入', '支出', '资金与成本详情', '记一笔', '导出 CSV']) {
+  for (const label of ['经营账本', '营业收入', '总支出', '预估利润', '今天', '近 7 天', '本月', '上月', '自定义日期', '全部业务', '永沙', '多嘻噜卡', '上游请求', '充值核验', '收支流水', '收入', '支出', '资金与成本详情', '记一笔', '导出 CSV']) {
     assert.match(renderer, new RegExp(label));
   }
   assert.match(renderer, /客户充值 \+ 其他收入/);
@@ -28,9 +28,9 @@ test('mobile finance ledger uses Chinese labels and independent finance APIs', a
   assert.match(renderer, /推广费用/);
   assert.match(renderer, /人工费用/);
   assert.doesNotMatch(renderer, /待成本同步|网关成本可用后/);
-  assert.match(renderer, /getBillingAccounting\(\{/);
+  assert.match(renderer, /getBusinessHubOverview\(\{/);
   assert.match(renderer, /mobileFinanceRange: 'month'/);
-  assert.match(renderer, /mobileFinanceRelayId: ''/);
+  assert.match(renderer, /mobileFinanceBusinessId: 'all'/);
   assert.match(renderer, /id="mobileFinanceStartDate"/);
   assert.match(renderer, /id="mobileFinanceEndDate"/);
   assert.match(renderer, /data-finance-relay/);
@@ -38,6 +38,8 @@ test('mobile finance ledger uses Chinese labels and independent finance APIs', a
   assert.match(renderer, /exchangeRate: element\.querySelector/);
   assert.doesNotMatch(renderer, /getFinanceLedger\(state\.mobileFinanceMonth\)/);
   assert.match(bridge, /\/api\/billing\/accounting/);
+  assert.match(bridge, /\/api\/business-hub\/overview/);
+  assert.match(bridge, /\/api\/business-hub\/recharge-action/);
   assert.match(bridge, /query\.set\('range'/);
   assert.match(bridge, /query\.set\('relayId'/);
   assert.match(bridge, /query\.set\('startDate'/);
