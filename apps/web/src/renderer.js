@@ -111,6 +111,7 @@ const state = {
   billingSummary: null,
   billingDetailSummary: null,
   billingDetailRelayId: '',
+  billingDetailUserId: '',
   billingAdmin: null,
   billingAdminFilter: '',
   billingAdminRelayId: '',
@@ -1034,25 +1035,24 @@ function renderBillingDetail() {
   if (!summary) return;
   const relays = summary.relays || state.billingSummary?.relays || [];
   const relay = relays.find(item => item.id === summary.relayId) || {};
-  const wallets = summary.wallets || [];
-  $('#billingDetailSummary').textContent = `${relay.name || '当前中转站'}：可用 ${formatMoney(summary.account?.availableMinor)}${summary.account?.reservedMinor ? `，任务预占 ${formatMoney(summary.account.reservedMinor)}` : ''}，扣费 ${feeRangeLabel(relay.imagePriceMinMinor, relay.imagePriceMaxMinor)}/张`;
-  const walletCards = relays.map(item => {
-    const wallet = wallets.find(value => value.relayId === item.id) || { balanceMinor: 0, availableMinor: 0 };
-    return `<button class="billing-rate-item${item.id === summary.relayId ? ' active' : ''}" type="button" data-billing-detail-relay="${escapeHtml(item.id)}"><span>${escapeHtml(item.name)}</span><b>${formatMoney(wallet.balanceMinor)}</b><em>${feeRangeLabel(item.imagePriceMinMinor, item.imagePriceMaxMinor)}/张</em></button>`;
-  }).join('');
-  $('#billingDetailRates').innerHTML = walletCards + renderBillingSpendTotals(summary);
+  const viewedUser = summary.viewedUser || state.currentUser || {};
+  const visibleUsers = summary.users || [viewedUser];
+  const transactions = summary.transactions || [];
+  $('#billingDetailSummary').textContent = `${viewedUser.displayName || viewedUser.username || '当前账号'} · ${relay.name || '当前服务'} · ${transactions.length} 条流水`;
+  const filters = $('#billingDetailFilters');
+  filters.hidden = state.currentUser?.role === 'member' && visibleUsers.length < 2;
+  $('#billingDetailUserFilter').innerHTML = visibleUsers.map(user => `<option value="${escapeHtml(user.id)}"${user.id === viewedUser.id ? ' selected' : ''}>${escapeHtml(user.displayName || user.username)} · ${escapeHtml(user.username)}</option>`).join('');
+  $('#billingDetailRelayFilter').innerHTML = relays.map(item => `<option value="${escapeHtml(item.id)}"${item.id === summary.relayId ? ' selected' : ''}>${escapeHtml(item.name)}</option>`).join('');
+  $('#billingDetailRates').innerHTML = renderBillingSpendTotals(summary);
   $('#billingDetailRates').hidden = false;
-  $('#billingDetailList').innerHTML = renderBillingLedger(summary.transactions || []);
+  $('#billingDetailList').innerHTML = renderBillingLedger(transactions);
   const customInput = $('#billingCustomDaysInput');
   if (customInput) {
     customInput.onchange = async () => {
       state.billingCustomDays = Math.max(1, Math.min(3660, Number(customInput.value) || 30));
-      await loadBillingDetail(summary.relayId);
+      await loadBillingDetail(summary.relayId, viewedUser.id);
     };
   }
-  $$('[data-billing-detail-relay]').forEach(button => {
-    button.onclick = () => loadBillingDetail(button.dataset.billingDetailRelay);
-  });
 }
 
 async function loadBillingSummary() {
@@ -1068,13 +1068,15 @@ async function loadBillingSummary() {
 async function openBillingDetail() {
   $('#billingDetailModal').hidden = false;
   await loadBillingSummary();
-  await loadBillingDetail(state.billingSummary?.relayId);
+  state.billingDetailUserId = state.currentUser?.id || '';
+  await loadBillingDetail(state.billingSummary?.relayId, state.billingDetailUserId);
 }
 
-async function loadBillingDetail(relayId) {
+async function loadBillingDetail(relayId, userId = state.billingDetailUserId || state.currentUser?.id || '') {
   try {
-    state.billingDetailSummary = await window.caishen.getBillingSummary(state.billingCustomDays, relayId || '');
+    state.billingDetailSummary = await window.caishen.getBillingDetail(state.billingCustomDays, relayId || '', userId);
     state.billingDetailRelayId = state.billingDetailSummary.relayId || '';
+    state.billingDetailUserId = state.billingDetailSummary.viewedUser?.id || userId;
     renderBillingDetail();
   } catch (error) { toast(errorText(error), true); }
 }
@@ -5425,7 +5427,9 @@ function bindEvents() {
   $('#refreshAlipayReviewButton').onclick = loadAlipayAdmin;
   $('#alipayReviewList').onclick = handleAlipayReviewClick;
   $('#closeBillingDetailButton').onclick = closeBillingDetail;
-  $('#refreshBillingDetailButton').onclick = loadBillingSummary;
+  $('#refreshBillingDetailButton').onclick = () => loadBillingDetail(state.billingDetailRelayId, state.billingDetailUserId);
+  $('#billingDetailUserFilter').onchange = event => loadBillingDetail(state.billingDetailRelayId, event.target.value);
+  $('#billingDetailRelayFilter').onchange = event => loadBillingDetail(event.target.value, state.billingDetailUserId);
   $('#billingDetailModal').onclick = event => { if (event.target === $('#billingDetailModal')) closeBillingDetail(); };
   $('#saveBillingRulesButton').onclick = saveBillingRules;
   $('#refreshBillingButton').onclick = loadBillingAdmin;

@@ -333,6 +333,7 @@ window.caishen = {
   requireAllPasswordChanges: () => authRequest('/api/auth/password-policy/require-all', { method: 'POST' }),
   deleteUser: id => authRequest(`/api/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getBillingSummary: (days, relayId = '') => authRequest(`/api/billing/me?days=${encodeURIComponent(Math.max(1, Math.trunc(Number(days) || 30)))}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}`),
+  getBillingDetail: (days, relayId = '', userId = '') => authRequest(`/api/billing/detail?days=${encodeURIComponent(Math.max(1, Math.trunc(Number(days) || 30)))}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}${userId ? `&userId=${encodeURIComponent(userId)}` : ''}`),
   getBillingAdmin: () => authRequest('/api/billing/admin'),
   getAlipayConfig: () => authRequest('/api/alipay/config'),
   getAlipayRecharges: () => authRequest('/api/alipay/recharges'),

@@ -240,6 +240,33 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
     assert.equal(memberSummary.body.data.transactions[0].description, '划拨给 Designer');
     assert.ok(memberSummary.body.data.transactions.some(entry => entry.description === '账户充值到账'));
 
+    const memberDetailForAdmin = await jsonFetch(`${base}/api/billing/detail?userId=${encodeURIComponent(member.id)}&relayId=relay-one`, {
+      headers: { Cookie: adminCookie }
+    });
+    assert.equal(memberDetailForAdmin.response.status, 200);
+    assert.equal(memberDetailForAdmin.body.data.viewedUser.id, member.id);
+    assert.deepEqual(
+      memberDetailForAdmin.body.data.users.map(user => user.id).sort(),
+      [admin.id, member.id, secondMember.id].sort()
+    );
+    assert.ok(memberDetailForAdmin.body.data.transactions.some(entry => entry.workspaceId === member.workspaceId));
+    assert.equal(memberDetailForAdmin.body.data.transactions.some(entry => entry.workspaceId !== member.workspaceId), false);
+
+    const outsiderDetailForAdmin = await jsonFetch(`${base}/api/billing/detail?userId=${encodeURIComponent(outsider.id)}&relayId=relay-one`, {
+      headers: { Cookie: adminCookie }
+    });
+    assert.equal(outsiderDetailForAdmin.response.status, 403);
+
+    const adminDetailForMember = await jsonFetch(`${base}/api/billing/detail?userId=${encodeURIComponent(admin.id)}&relayId=relay-one`, {
+      headers: { Cookie: memberCookie }
+    });
+    assert.equal(adminDetailForMember.response.status, 403);
+    const ownDetailForMember = await jsonFetch(`${base}/api/billing/detail?userId=${encodeURIComponent(member.id)}&relayId=relay-one`, {
+      headers: { Cookie: memberCookie }
+    });
+    assert.equal(ownDetailForMember.response.status, 200);
+    assert.deepEqual(ownDetailForMember.body.data.users.map(user => user.id), [member.id]);
+
     const adminSummaryAfterTransfer = await jsonFetch(`${base}/api/billing/me`, {
       headers: { Cookie: adminCookie }
     });

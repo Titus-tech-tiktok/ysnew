@@ -1290,6 +1290,38 @@ async function startServer() {
     }
   });
 
+  app.get('/api/billing/detail', async (req, res) => {
+    try {
+      const allUsers = await auth.listUsers();
+      const visibleUsers = isTeamAdmin(req.user)
+        ? billingVisibleUsersForActor(allUsers, req.user)
+        : allUsers.filter(user => user.id === req.user.id);
+      const requestedUserId = String(req.query.userId || req.user.id);
+      const target = visibleUsers.find(user => user.id === requestedUserId);
+      if (!target) return res.status(403).json({ error: '不能查看该账号的费用明细' });
+      const days = Math.max(1, Math.min(3660, Math.trunc(Number(req.query.days) || 30)));
+      const relayChoices = await runtime.loadRelayChoices(true);
+      const requestedRelayId = String(req.query.relayId || relayChoices.activeRelayId || 'default-relay');
+      const relay = relayChoices.relays.find(item => item.id === requestedRelayId);
+      const relayId = relay?.id || relayChoices.activeRelayId || 'default-relay';
+      const data = await runtime.billing.getSummary(target.workspaceId, relayId, 500);
+      data.transactions = (data.transactions || []).map(({ operatorUserId, onceKey, ...entry }) => entry);
+      delete data.allTransactions;
+      data.relays = relayChoices.relays;
+      data.activeRelayId = relayChoices.activeRelayId;
+      data.customSpendDays = days;
+      if (![1, 7, 30].includes(days)) data.spendTotals = {
+        ...(data.spendTotals || {}),
+        ...(await runtime.billing.getSpendTotals(target.workspaceId, [days], relayId))
+      };
+      data.viewedUser = { id: target.id, username: target.username, displayName: target.displayName, role: target.role };
+      data.users = visibleUsers.map(user => ({ id: user.id, username: user.username, displayName: user.displayName, role: user.role }));
+      return res.json({ data });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
   app.get('/api/billing/admin', async (req, res) => {
     if (!isTeamAdmin(req.user)) return res.status(403).json({ error: '只有管理员可以查看团队算力余额' });
     try {
