@@ -278,13 +278,17 @@
       <div class="modal-head"><div><span class="eyebrow"><span class="alipay-mark">支</span> ALIPAY</span><h2 id="alipayTitle">Alipay</h2><p>选择充值额度并按页面金额付款，付款完成后提交支付宝订单号。</p></div><button class="icon-button" id="closeAlipayButton" aria-label="关闭">×</button></div>
       <div class="alipay-customer-body">
         <section class="alipay-pay-panel">
-          <label>充值额度（USD）<div class="money-input"><span>$</span><input id="alipayAmountUsd" type="number" min="1" max="1000000" step="0.01" placeholder="100.00"></div></label>
-          <div class="alipay-payment-amount"><span>本次应付</span><b id="alipayPaymentCny">¥0.00</b></div>
-          <div class="alipay-qr-frame"><img id="alipayQrImage" alt="支付宝收款码"><span id="alipayQrEmpty">收款码暂不可用</span></div>
-          <p class="alipay-order-reminder"><b>付款前请注意</b>付款完成后，请打开支付宝账单，复制本次交易的支付宝订单号。支付金额和订单号填写正确后才可提交核验。</p>
-          <label>实际支付金额（CNY）<div class="money-input"><span>¥</span><input id="alipayPaidCny" type="number" min="0.01" step="0.01" placeholder="按支付宝账单填写"></div></label>
-          <label>支付宝订单号<input id="alipayOrderNo" inputmode="numeric" maxlength="64" placeholder="粘贴 12-64 位数字订单号"></label>
-          <button class="primary" id="submitAlipayRechargeButton" type="button">提交到账核验</button>
+          <div class="alipay-qr-column">
+            <div class="alipay-qr-frame"><img id="alipayQrImage" alt="支付宝收款码"><span id="alipayQrEmpty">收款码暂不可用</span></div>
+            <p class="alipay-order-reminder"><b>付款前请注意</b>付款完成后，请打开支付宝账单，复制本次交易的支付宝订单号。支付金额和订单号填写正确后才可提交核验。</p>
+          </div>
+          <div class="alipay-form-column">
+            <label>充值额度（USD）<div class="money-input"><span>$</span><input id="alipayAmountUsd" type="number" min="1" max="1000000" step="0.01" placeholder="100.00"></div></label>
+            <div class="alipay-payment-amount"><span>本次应付</span><b id="alipayPaymentCny">¥0.00</b></div>
+            <label>实际支付金额（CNY）<div class="money-input"><span>¥</span><input id="alipayPaidCny" type="number" min="0.01" step="0.01" placeholder="按支付宝账单填写"></div></label>
+            <label>支付宝订单号<input id="alipayOrderNo" inputmode="numeric" maxlength="64" placeholder="粘贴 12-64 位数字订单号"></label>
+            <button class="primary" id="submitAlipayRechargeButton" type="button">提交到账核验</button>
+          </div>
         </section>
         <section class="alipay-history-panel"><h3>充值记录</h3><div id="alipayHistoryList"><div class="empty-inline">暂无充值记录</div></div></section>
       </div>

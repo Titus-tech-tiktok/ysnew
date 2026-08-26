@@ -8523,18 +8523,20 @@ label input, label textarea {
 .alipay-review-row label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 800; }
 .alipay-qr-upload small { font-weight: 500; }
 
-.alipay-modal { width: min(980px, calc(100vw - 30px)); }
-.alipay-customer-body { padding: 20px; display: grid; grid-template-columns: minmax(300px, .85fr) minmax(340px, 1.15fr); gap: 20px; }
-.alipay-pay-panel, .alipay-history-panel { padding: 18px; border: 1px solid var(--line); border-radius: 16px; display: grid; gap: 14px; background: #fff; }
+.alipay-modal { width: min(1320px, calc(100vw - 36px)); max-height: calc(100vh - 36px); }
+.alipay-customer-body { padding: 18px 20px; display: grid; grid-template-columns: minmax(540px, 1.45fr) minmax(280px, .85fr); gap: 18px; }
+.alipay-pay-panel, .alipay-history-panel { padding: 16px; border: 1px solid var(--line); border-radius: 16px; display: grid; gap: 14px; background: #fff; }
+.alipay-pay-panel { grid-template-columns: minmax(220px, .85fr) minmax(280px, 1.15fr); align-items: start; }
+.alipay-qr-column, .alipay-form-column { min-width: 0; display: grid; align-content: start; gap: 12px; }
 .alipay-history-panel { align-content: start; }
 .alipay-history-panel h3 { margin: 0; }
-.money-input { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 11px; background: #fff; overflow: hidden; }
-.money-input span { padding-left: 12px; color: var(--muted); }
-.money-input input { border: 0; }
+.alipay-modal .money-input { position: relative; display: block; border: 1px solid var(--line); border-radius: 11px; background: #fff; overflow: hidden; }
+.alipay-modal .money-input > span { position: absolute; z-index: 1; left: 13px; top: 50%; padding: 0; color: var(--muted); line-height: 1; transform: translateY(-50%); pointer-events: none; }
+.alipay-modal .money-input input { width: 100%; min-width: 0; box-sizing: border-box; border: 0; padding: 11px 13px 11px 34px; }
 .alipay-payment-amount { padding: 12px 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; background: #eef6ff; color: #1677ff; }
 .alipay-payment-amount b { font-size: 24px; }
-.alipay-qr-frame { min-height: 230px; padding: 12px; border: 1px dashed #9fbde7; border-radius: 14px; display: grid; place-items: center; background: #f7fbff; }
-.alipay-qr-frame img { width: min(100%, 270px); max-height: 300px; object-fit: contain; }
+.alipay-qr-frame { height: 310px; padding: 10px; border: 1px dashed #9fbde7; border-radius: 14px; display: grid; place-items: center; background: #f7fbff; }
+.alipay-qr-frame img { width: 100%; height: 100%; object-fit: contain; }
 .alipay-qr-frame span { color: var(--muted); }
 .alipay-order-reminder { margin: 0; padding: 12px 14px; border-left: 4px solid #1677ff; border-radius: 10px; background: #f2f7ff; color: #49617f; font-size: 12px; line-height: 1.7; }
 .alipay-order-reminder b { display: block; color: #173b69; }
@@ -8555,7 +8557,9 @@ label input, label textarea {
 @media (max-width: 900px) {
   .alipay-admin-config, .alipay-customer-body, .alipay-review-row { grid-template-columns: 1fr; }
   .alipay-customer-body { padding: 12px; }
-  .alipay-modal { width: calc(100vw - 18px); }
+  .alipay-modal { width: calc(100vw - 18px); max-height: calc(100vh - 18px); overflow: auto; }
+  .alipay-pay-panel { grid-template-columns: 1fr; }
+  .alipay-qr-frame { height: min(340px, 55vh); }
   .alipay-history-row { align-items: flex-start; flex-direction: column; }
   .alipay-history-row strong { text-align: left; }
 }

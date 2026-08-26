@@ -1099,7 +1099,7 @@ function rechargeStatusLabel(status) {
 function renderAlipayHistory() {
   const list = $('#alipayHistoryList');
   if (!list) return;
-  list.innerHTML = state.alipayRecharges.length ? state.alipayRecharges.map(order => `
+  list.innerHTML = state.alipayRecharges.length ? state.alipayRecharges.slice(0, 5).map(order => `
     <div class="alipay-history-row ${escapeHtml(order.status)}">
       <div><b>${escapeHtml(rechargeStatusLabel(order.status))}</b><span>${escapeHtml(formatLocalDateTime(order.submittedAt))} · 订单号 ${escapeHtml(order.alipayOrderNo)}</span>${order.rejectionReason ? `<small>${escapeHtml(order.rejectionReason)}</small>` : ''}</div>
       <strong>${order.status === 'approved' ? `${formatRechargeMoney(order.creditMinor)} 已计入服务余额` : formatRechargeMoney(order.requestedCreditMinor)}</strong>
