@@ -11,12 +11,14 @@ const multer = require('multer');
 const sharp = require('sharp');
 const runtime = require('./runtime');
 const { createAuthService } = require('./auth');
+const { createAlipayRechargeService } = require('./alipay-recharge');
 const { metadataPaths, normalizeSourceMetadata } = require('./core/review-engine');
 const { isSameOrChildPath } = require('./core/path-utils');
 
 const PORT = Math.max(1, Number(process.env.PORT || 8788));
 const HOST = String(process.env.CAISHEN_HOST || '127.0.0.1');
 const auth = createAuthService(runtime.DATA_ROOT);
+const alipayRecharge = createAlipayRechargeService(runtime.DATA_ROOT, runtime.billing);
 const tempRoot = () => path.join(runtime.WORKSPACE_ROOT, 'tmp');
 const assetRoot = () => path.join(runtime.WORKSPACE_ROOT, 'assets');
 const jobRoot = () => path.join(runtime.WORKSPACE_ROOT, 'jobs');
@@ -1157,6 +1159,104 @@ async function startServer() {
       const target = await auth.getUserById(req.params.id);
       if (!canManageUser(req.user, target)) return res.status(403).json({ error: `不能删除该${roleName(target?.role)}账号` });
       return res.json({ data: await auth.deleteUser(req.params.id, req.user) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.get('/api/alipay/config', async (req, res) => {
+    if (req.user.role !== 'admin' && !isSuperAdmin(req.user)) return res.status(403).json({ error: '当前账号不能使用 Alipay' });
+    try {
+      const settings = await alipayRecharge.getSettings();
+      return res.json({ data: { ...settings, qrUrl: settings.qrAvailable ? '/api/alipay/qr' : '' } });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.get('/api/alipay/qr', async (req, res) => {
+    const settings = await alipayRecharge.getSettings();
+    if (!settings.qrAvailable) return res.status(404).json({ error: '收款码尚未配置' });
+    return res.sendFile(alipayRecharge.qrFile);
+  });
+
+  app.get('/api/alipay/recharges', async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '当前账号不能提交充值核验' });
+    return res.json({ data: await alipayRecharge.listMine(req.user.id) });
+  });
+
+  app.post('/api/alipay/recharges', async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '当前账号不能提交充值核验' });
+    try {
+      const relayChoices = await runtime.loadRelayChoices(true);
+      const relay = relayChoices.relays.find(item => item.id === relayChoices.activeRelayId);
+      if (!relay) throw new Error('当前服务暂不可用');
+      const order = await alipayRecharge.createOrder(req.body || {}, {
+        userId: req.user.id,
+        workspaceId: req.user.workspaceId,
+        username: req.user.username,
+        displayName: req.user.displayName,
+        relayId: relay.id,
+        relayName: relay.name
+      });
+      return res.status(201).json({ data: order });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.get('/api/alipay/settings', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权查看 Alipay 配置' });
+    return res.json({ data: await alipayRecharge.getSettings() });
+  });
+
+  app.put('/api/alipay/settings', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权修改 Alipay 配置' });
+    try {
+      return res.json({ data: await alipayRecharge.saveSettings(req.body || {}) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/alipay/settings/qr', (req, res, next) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权修改 Alipay 配置' });
+    return next();
+  }, upload.single('qr'), async (req, res) => {
+    if (!req.file?.path) return res.status(400).json({ error: '请选择支付宝收款码图片' });
+    const temporary = `${alipayRecharge.qrFile}.${process.pid}.tmp.png`;
+    try {
+      await fsp.mkdir(path.dirname(alipayRecharge.qrFile), { recursive: true });
+      await sharp(req.file.path, { failOn: 'error', limitInputPixels: 40_000_000 })
+        .rotate().resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true }).png().toFile(temporary);
+      await fsp.rename(temporary, alipayRecharge.qrFile);
+      return res.json({ data: await alipayRecharge.getSettings() });
+    } catch (error) {
+      await fsp.rm(temporary, { force: true }).catch(() => {});
+      return res.status(400).json({ error: '收款码图片无法识别，请使用 JPG、PNG 或 WebP 图片' });
+    } finally {
+      await fsp.rm(req.file.path, { force: true }).catch(() => {});
+    }
+  });
+
+  app.get('/api/alipay/review', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权查看充值核验记录' });
+    return res.json({ data: await alipayRecharge.listReview() });
+  });
+
+  app.post('/api/alipay/recharges/:id/approve', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权处理充值核验' });
+    try {
+      return res.json({ data: await alipayRecharge.approve(req.params.id, req.body || {}, req.user.id) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/alipay/recharges/:id/reject', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权处理充值核验' });
+    try {
+      return res.json({ data: await alipayRecharge.reject(req.params.id, req.body?.reason) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }

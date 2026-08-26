@@ -114,6 +114,9 @@ const state = {
   billingAdmin: null,
   billingAdminFilter: '',
   billingAdminRelayId: '',
+  alipayConfig: null,
+  alipayRecharges: [],
+  alipayReview: [],
   mobileStats: null,
   mobileStatsRange: 'today',
   mobileStatsRelayId: '',
@@ -269,6 +272,7 @@ function applyCurrentUser(user) {
   $('#apiSettingsTab').firstChild.textContent = isSuperAdmin() ? 'API 设置 ' : '中转站 ';
   if (apiTabStatus) apiTabStatus.textContent = '未配置';
   $('#billingSettingsTab').hidden = !isSuperAdmin();
+  $('#openAlipayButton').hidden = user.role !== 'admin';
   $('#teamSettingsTab').hidden = !isTeamAdmin();
   $('#newUserRoleLabel').hidden = !isSuperAdmin();
   $('#authGate').hidden = true;
@@ -1078,6 +1082,157 @@ async function loadBillingDetail(relayId) {
 function closeBillingDetail() {
   $('#billingDetailModal').hidden = true;
   state.billingDetailSummary = null;
+}
+
+function formatRechargeMoney(minor) {
+  return `$${((Number(minor) || 0) / BILLING_AMOUNT_SCALE).toFixed(2)}`;
+}
+
+function formatCny(cents) {
+  return `¥${((Number(cents) || 0) / 100).toFixed(2)}`;
+}
+
+function rechargeStatusLabel(status) {
+  return { pending: '到账核验中', approved: '充值成功', rejected: '未通过核验' }[status] || '处理中';
+}
+
+function renderAlipayHistory() {
+  const list = $('#alipayHistoryList');
+  if (!list) return;
+  list.innerHTML = state.alipayRecharges.length ? state.alipayRecharges.map(order => `
+    <div class="alipay-history-row ${escapeHtml(order.status)}">
+      <div><b>${escapeHtml(rechargeStatusLabel(order.status))}</b><span>${escapeHtml(formatLocalDateTime(order.submittedAt))} · 订单号 ${escapeHtml(order.alipayOrderNo)}</span>${order.rejectionReason ? `<small>${escapeHtml(order.rejectionReason)}</small>` : ''}</div>
+      <strong>${order.status === 'approved' ? `${formatRechargeMoney(order.creditMinor)} 已计入服务余额` : formatRechargeMoney(order.requestedCreditMinor)}</strong>
+    </div>`).join('') : '<div class="empty-inline">暂无充值记录</div>';
+}
+
+async function loadAlipayEntry() {
+  if (state.currentUser?.role !== 'admin') return;
+  try {
+    state.alipayConfig = await window.caishen.getAlipayConfig();
+    $('#openAlipayButton').hidden = !state.alipayConfig.enabled;
+  } catch {
+    $('#openAlipayButton').hidden = true;
+  }
+}
+
+function updateAlipayPaymentAmount() {
+  const value = String($('#alipayAmountUsd')?.value || '').trim();
+  const valid = /^\d{1,7}(?:\.\d{0,2})?$/.test(value) && Number(value) >= 1 && Number(value) <= 1_000_000;
+  $('#alipayPaymentCny').textContent = valid ? `¥${(Number(value) * 7).toFixed(2)}` : '¥0.00';
+  return valid;
+}
+
+async function loadAlipayHistory() {
+  state.alipayRecharges = await window.caishen.getAlipayRecharges();
+  renderAlipayHistory();
+}
+
+async function openAlipay() {
+  $('#alipayModal').hidden = false;
+  $('#alipayCustomerStatus').textContent = '正在读取 Alipay 配置…';
+  try {
+    state.alipayConfig = await window.caishen.getAlipayConfig();
+    if (!state.alipayConfig.enabled || !state.alipayConfig.qrAvailable) throw new Error('Alipay 当前暂不可用');
+    $('#alipayQrImage').src = `${state.alipayConfig.qrUrl}?v=${Date.now()}`;
+    $('#alipayQrImage').hidden = false;
+    $('#alipayQrEmpty').hidden = true;
+    $('#alipayCustomerStatus').textContent = state.alipayConfig.payeeName ? `收款方：${state.alipayConfig.payeeName}` : '请按页面显示金额完成付款。';
+    await loadAlipayHistory();
+  } catch (error) {
+    $('#alipayQrImage').hidden = true;
+    $('#alipayQrEmpty').hidden = false;
+    $('#alipayCustomerStatus').textContent = errorText(error);
+  }
+}
+
+function closeAlipay() {
+  $('#alipayModal').hidden = true;
+}
+
+async function submitAlipayRecharge() {
+  const amountUsd = String($('#alipayAmountUsd').value || '').trim();
+  const paymentCny = String($('#alipayPaidCny').value || '').trim();
+  const alipayOrderNo = String($('#alipayOrderNo').value || '').replace(/\s+/g, '');
+  if (!updateAlipayPaymentAmount()) return toast('请输入正确的充值金额，最多保留两位小数', true);
+  if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(paymentCny) || Math.round(Number(paymentCny) * 100) !== Math.round(Number(amountUsd) * 700)) return toast('实际支付金额与本次应付金额不一致', true);
+  if (!/^\d{12,64}$/.test(alipayOrderNo)) return toast('请输入正确的支付宝订单号（12-64 位数字）', true);
+  const button = $('#submitAlipayRechargeButton');
+  button.disabled = true;
+  try {
+    await window.caishen.submitAlipayRecharge({ amountUsd, paymentCny, alipayOrderNo });
+    $('#alipayPaidCny').value = '';
+    $('#alipayOrderNo').value = '';
+    await loadAlipayHistory();
+    $('#alipayCustomerStatus').textContent = '已提交，正在进行到账核验。';
+    toast('已提交到账核验');
+  } catch (error) { toast(errorText(error), true); }
+  finally { button.disabled = false; }
+}
+
+function renderAlipayReview() {
+  const list = $('#alipayReviewList');
+  if (!list) return;
+  list.innerHTML = state.alipayReview.length ? state.alipayReview.map(order => `
+    <div class="alipay-review-row ${escapeHtml(order.status)}" data-alipay-review="${escapeHtml(order.id)}">
+      <div class="alipay-review-copy"><b>${escapeHtml(order.displayName || order.username)} · ${escapeHtml(rechargeStatusLabel(order.status))}</b><span>订单号 ${escapeHtml(order.alipayOrderNo)} · ${escapeHtml(formatLocalDateTime(order.submittedAt))}</span><small>申请 ${formatRechargeMoney(order.requestedCreditMinor)} · 应付 ${formatCny(order.requestedPaymentCnyCents)} · 服务 ${escapeHtml(order.serviceName || '当前服务')}</small></div>
+      ${order.status === 'pending' ? `<label>确认入账额度（USD）<input data-alipay-actual type="number" min="1" max="1000000" step="0.01" value="${(Number(order.requestedCreditMinor || 0) / BILLING_AMOUNT_SCALE).toFixed(2)}"></label><div class="inline-actions"><button class="secondary danger-outline" data-alipay-reject type="button">未核验到款</button><button class="primary" data-alipay-approve type="button">确认到账</button></div>` : `<strong>${order.status === 'approved' ? `已入账 ${formatRechargeMoney(order.creditMinor)}` : escapeHtml(order.rejectionReason || '未通过')}</strong>`}
+    </div>`).join('') : '<div class="empty-inline">暂无到账核验记录</div>';
+}
+
+async function loadAlipayAdmin() {
+  if (!isSuperAdmin()) return;
+  try {
+    const [settings, review] = await Promise.all([window.caishen.getAlipaySettings(), window.caishen.getAlipayReview()]);
+    state.alipayReview = review;
+    $('#alipayPayeeName').value = settings.payeeName || '';
+    $('#alipayEnabled').checked = settings.enabled === true;
+    $('#alipayQrHint').textContent = settings.qrAvailable ? '已上传收款码' : '尚未上传收款码';
+    $('#alipayAdminStatus').textContent = settings.enabled ? '已启用' : '未启用';
+    renderAlipayReview();
+  } catch (error) { toast(errorText(error), true); }
+}
+
+async function saveAlipaySettings() {
+  try {
+    await window.caishen.saveAlipaySettings({ enabled: $('#alipayEnabled').checked, payeeName: $('#alipayPayeeName').value.trim() });
+    await loadAlipayAdmin();
+    toast('Alipay 配置已保存');
+  } catch (error) { toast(errorText(error), true); }
+}
+
+async function uploadAlipayQr() {
+  const file = $('#alipayQrFile').files?.[0];
+  if (!file) return toast('请选择支付宝收款码图片', true);
+  try {
+    await window.caishen.uploadAlipayQr(file);
+    $('#alipayQrFile').value = '';
+    await loadAlipayAdmin();
+    toast('收款码已上传');
+  } catch (error) { toast(errorText(error), true); }
+}
+
+async function handleAlipayReviewClick(event) {
+  const row = event.target.closest('[data-alipay-review]');
+  if (!row) return;
+  if (event.target.closest('[data-alipay-reject]')) {
+    const reason = window.prompt('填写未通过原因', '未核验到对应款项');
+    if (reason === null) return;
+    try { await window.caishen.rejectAlipayRecharge(row.dataset.alipayReview, reason); await loadAlipayAdmin(); toast('已更新核验结果'); }
+    catch (error) { toast(errorText(error), true); }
+    return;
+  }
+  const approve = event.target.closest('[data-alipay-approve]');
+  if (!approve) return;
+  const actualAmountUsd = String(row.querySelector('[data-alipay-actual]')?.value || '').trim();
+  if (!/^\d{1,7}(?:\.\d{1,2})?$/.test(actualAmountUsd) || Number(actualAmountUsd) < 1) return toast('请输入正确的实际入账额度', true);
+  if (!window.confirm(`确认支付宝已到账，并按 $${Number(actualAmountUsd).toFixed(2)} 入账？`)) return;
+  approve.disabled = true;
+  try {
+    await window.caishen.approveAlipayRecharge(row.dataset.alipayReview, actualAmountUsd);
+    await Promise.all([loadAlipayAdmin(), loadBillingAdmin()]);
+    toast(`充值成功，$${Number(actualAmountUsd).toFixed(2)} 已计入服务余额`);
+  } catch (error) { approve.disabled = false; toast(errorText(error), true); }
 }
 
 function apiTestErrorText(error) {
@@ -4233,7 +4388,7 @@ function renderSettingsTabs(name = state.settingsTab) {
     loadRelayChoices();
   }
   if (name === 'team') loadTeamUsers();
-  if (name === 'billing') loadBillingAdmin();
+  if (name === 'billing') Promise.all([loadBillingAdmin(), loadAlipayAdmin()]);
 }
 
 function renderBillingAdmin() {
@@ -5258,6 +5413,16 @@ function bindEvents() {
   $('#saveSettingsButton').onclick = saveSettings;
   $('#resetSettingsButton').onclick = resetSettings;
   $('#openBillingDetailButton').onclick = openBillingDetail;
+  $('#openAlipayButton').onclick = openAlipay;
+  $('#closeAlipayButton').onclick = closeAlipay;
+  $('#alipayModal').onclick = event => { if (event.target === $('#alipayModal')) closeAlipay(); };
+  $('#alipayAmountUsd').oninput = updateAlipayPaymentAmount;
+  $('#submitAlipayRechargeButton').onclick = submitAlipayRecharge;
+  $('#refreshAlipayHistoryButton').onclick = loadAlipayHistory;
+  $('#saveAlipaySettingsButton').onclick = saveAlipaySettings;
+  $('#uploadAlipayQrButton').onclick = uploadAlipayQr;
+  $('#refreshAlipayReviewButton').onclick = loadAlipayAdmin;
+  $('#alipayReviewList').onclick = handleAlipayReviewClick;
   $('#closeBillingDetailButton').onclick = closeBillingDetail;
   $('#refreshBillingDetailButton').onclick = loadBillingSummary;
   $('#billingDetailModal').onclick = event => { if (event.target === $('#billingDetailModal')) closeBillingDetail(); };
@@ -5510,7 +5675,7 @@ async function start() {
     ...(isTeamAdmin() ? [loadRelayChoices()] : []),
     ...(isSuperAdmin() ? [loadApiSettings()] : [])
   ];
-  await Promise.all([loadTemplatePreparation(), loadBillingSummary(), ...adminLoads]);
+  await Promise.all([loadTemplatePreparation(), loadBillingSummary(), ...(state.currentUser?.role === 'admin' ? [loadAlipayEntry()] : []), ...adminLoads]);
   await Promise.all([loadAssets('categoriesPath'), loadAssets('printsPath')]);
   renderQueue();
 }

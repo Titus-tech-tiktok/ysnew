@@ -8479,3 +8479,83 @@ label input, label textarea {
     min-height: 40px;
   }
 }
+
+.alipay-entry {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 8px;
+  border: 1px solid rgba(22, 119, 255, .35);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(22, 119, 255, .1);
+  color: #eaf3ff;
+}
+
+.alipay-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: #1677ff;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+  font-style: normal;
+}
+
+.alipay-admin-card,
+.alipay-review-card { grid-column: 1 / -1; }
+
+.alipay-admin-config {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(260px, 1fr) minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+}
+
+.alipay-admin-config label,
+.alipay-pay-panel label,
+.alipay-review-row label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.alipay-qr-upload small { font-weight: 500; }
+
+.alipay-modal { width: min(980px, calc(100vw - 30px)); }
+.alipay-customer-body { padding: 20px; display: grid; grid-template-columns: minmax(300px, .85fr) minmax(340px, 1.15fr); gap: 20px; }
+.alipay-pay-panel, .alipay-history-panel { padding: 18px; border: 1px solid var(--line); border-radius: 16px; display: grid; gap: 14px; background: #fff; }
+.alipay-history-panel { align-content: start; }
+.alipay-history-panel h3 { margin: 0; }
+.money-input { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 11px; background: #fff; overflow: hidden; }
+.money-input span { padding-left: 12px; color: var(--muted); }
+.money-input input { border: 0; }
+.alipay-payment-amount { padding: 12px 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; background: #eef6ff; color: #1677ff; }
+.alipay-payment-amount b { font-size: 24px; }
+.alipay-qr-frame { min-height: 230px; padding: 12px; border: 1px dashed #9fbde7; border-radius: 14px; display: grid; place-items: center; background: #f7fbff; }
+.alipay-qr-frame img { width: min(100%, 270px); max-height: 300px; object-fit: contain; }
+.alipay-qr-frame span { color: var(--muted); }
+.alipay-order-reminder { margin: 0; padding: 12px 14px; border-left: 4px solid #1677ff; border-radius: 10px; background: #f2f7ff; color: #49617f; font-size: 12px; line-height: 1.7; }
+.alipay-order-reminder b { display: block; color: #173b69; }
+.alipay-history-row { padding: 13px 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.alipay-history-row > div { min-width: 0; display: grid; gap: 4px; }
+.alipay-history-row span, .alipay-history-row small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.alipay-history-row strong { text-align: right; color: var(--navy); font-size: 12px; }
+.alipay-history-row.approved b, .alipay-history-row.approved strong { color: var(--teal); }
+.alipay-history-row.rejected b { color: var(--danger); }
+
+.alipay-review-list { display: grid; gap: 10px; }
+.alipay-review-row { padding: 14px; border: 1px solid var(--line); border-radius: 13px; display: grid; grid-template-columns: minmax(260px, 1fr) minmax(190px, .35fr) auto; align-items: end; gap: 14px; }
+.alipay-review-copy { display: grid; gap: 4px; }
+.alipay-review-copy span, .alipay-review-copy small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.alipay-review-row.approved { border-color: rgba(45, 125, 111, .35); background: rgba(45, 125, 111, .04); }
+.alipay-review-row.rejected { opacity: .72; }
+
+@media (max-width: 900px) {
+  .alipay-admin-config, .alipay-customer-body, .alipay-review-row { grid-template-columns: 1fr; }
+  .alipay-customer-body { padding: 12px; }
+  .alipay-modal { width: calc(100vw - 18px); }
+  .alipay-history-row { align-items: flex-start; flex-direction: column; }
+  .alipay-history-row strong { text-align: left; }
+}

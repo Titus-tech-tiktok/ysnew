@@ -43,6 +43,7 @@
       </nav>
       <div class="sidebar-finance">
         <button class="sidebar-balance" id="openBillingDetailButton" type="button"><span>算力余额</span><b id="currentBalance">读取中…</b><small id="currentBillingHint">点击查看费用明细</small></button>
+        <button class="alipay-entry" id="openAlipayButton" type="button" hidden><span class="alipay-mark">支</span><b>Alipay</b></button>
         <div class="sidebar-account"><div><span>当前账号</span><b id="currentUserName">正在读取…</b></div><div class="sidebar-account-actions"><button class="text-button" id="changePasswordButton" type="button">改密</button><button class="text-button" id="logoutButton" type="button">退出</button></div></div>
       </div>
     </header>
@@ -238,6 +239,19 @@
               <div class="settings-card-head"><div><h3>最近费用流水</h3><p>记录成功生图和管理员调账；旧版模型调用记录仍会保留。</p></div><div class="inline-actions"><button class="text-button danger-text" id="clearBillingLedgerButton" type="button">清空流水</button><button class="text-button" id="refreshBillingButton" type="button">刷新</button></div></div>
               <div class="billing-ledger-list" id="billingLedgerList"><div class="empty-inline">暂无费用流水</div></div>
             </section>
+            <section class="settings-card alipay-admin-card">
+              <div class="settings-card-head"><div><h3>Alipay 配置</h3><p>设置收款码和功能状态；充值金额由系统生成，到账后再核验入账。</p></div><span id="alipayAdminStatus">读取中…</span></div>
+              <div class="alipay-admin-config">
+                <label>收款方名称<input id="alipayPayeeName" maxlength="80" placeholder="用于付款前核对"></label>
+                <label class="billing-toggle"><span><b>启用 Alipay</b><small>启用前请先上传有效收款码。</small></span><input id="alipayEnabled" type="checkbox"></label>
+                <label class="alipay-qr-upload">支付宝收款码<input id="alipayQrFile" type="file" accept="image/png,image/jpeg,image/webp"><small id="alipayQrHint">尚未上传</small></label>
+                <div class="inline-actions"><button class="secondary" id="uploadAlipayQrButton" type="button">上传收款码</button><button class="primary" id="saveAlipaySettingsButton" type="button">保存 Alipay 配置</button></div>
+              </div>
+            </section>
+            <section class="settings-card alipay-review-card">
+              <div class="settings-card-head"><div><h3>Alipay 到账核验</h3><p>请按支付宝订单号核对实际到账金额；确认前可以修正入账额度。</p></div><button class="text-button" id="refreshAlipayReviewButton" type="button">刷新</button></div>
+              <div class="alipay-review-list" id="alipayReviewList"><div class="empty-inline">正在读取核验记录…</div></div>
+            </section>
             <div class="settings-foot"><span>算力余额不足时不会调用上游模型；并发任务会先占用预计费用，完成后才正式扣款。</span></div>
           </section>
         </div>
@@ -257,6 +271,24 @@
       <div class="billing-detail-rates" id="billingDetailRates"></div>
       <div class="billing-ledger-list billing-detail-list" id="billingDetailList"><div class="empty-inline">正在读取费用明细…</div></div>
       <div class="modal-foot"><span>只有成功的模型调用会扣费。</span><div><button class="secondary" id="refreshBillingDetailButton" type="button">刷新</button></div></div>
+    </section>
+  </div>
+  <div class="modal-backdrop" id="alipayModal" hidden>
+    <section class="modal-card alipay-modal" role="dialog" aria-modal="true" aria-labelledby="alipayTitle">
+      <div class="modal-head"><div><span class="eyebrow"><span class="alipay-mark">支</span> ALIPAY</span><h2 id="alipayTitle">Alipay</h2><p>选择充值额度并按页面金额付款，付款完成后提交支付宝订单号。</p></div><button class="icon-button" id="closeAlipayButton" aria-label="关闭">×</button></div>
+      <div class="alipay-customer-body">
+        <section class="alipay-pay-panel">
+          <label>充值额度（USD）<div class="money-input"><span>$</span><input id="alipayAmountUsd" type="number" min="1" max="1000000" step="0.01" placeholder="100.00"></div></label>
+          <div class="alipay-payment-amount"><span>本次应付</span><b id="alipayPaymentCny">¥0.00</b></div>
+          <div class="alipay-qr-frame"><img id="alipayQrImage" alt="支付宝收款码"><span id="alipayQrEmpty">收款码暂不可用</span></div>
+          <p class="alipay-order-reminder"><b>付款前请注意</b>付款完成后，请打开支付宝账单，复制本次交易的支付宝订单号。支付金额和订单号填写正确后才可提交核验。</p>
+          <label>实际支付金额（CNY）<div class="money-input"><span>¥</span><input id="alipayPaidCny" type="number" min="0.01" step="0.01" placeholder="按支付宝账单填写"></div></label>
+          <label>支付宝订单号<input id="alipayOrderNo" inputmode="numeric" maxlength="64" placeholder="粘贴 12-64 位数字订单号"></label>
+          <button class="primary" id="submitAlipayRechargeButton" type="button">提交到账核验</button>
+        </section>
+        <section class="alipay-history-panel"><h3>充值记录</h3><div id="alipayHistoryList"><div class="empty-inline">暂无充值记录</div></div></section>
+      </div>
+      <div class="modal-foot"><span id="alipayCustomerStatus">请按页面显示金额完成付款。</span><div><button class="secondary" id="refreshAlipayHistoryButton" type="button">刷新记录</button></div></div>
     </section>
   </div>
   <div class="modal-backdrop" id="changePasswordModal" hidden>

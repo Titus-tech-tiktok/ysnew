@@ -124,6 +124,7 @@ function createBillingService(dataRoot) {
       : Math.max(0, Number(initialBalance) || 0);
     value.reservations = value.reservations && typeof value.reservations === 'object' ? value.reservations : {};
     value.chargedOnce = value.chargedOnce && typeof value.chargedOnce === 'object' ? value.chargedOnce : {};
+    value.adjustedOnce = value.adjustedOnce && typeof value.adjustedOnce === 'object' ? value.adjustedOnce : {};
     value.createdAt ||= new Date().toISOString();
     value.updatedAt ||= value.createdAt;
     cleanReservations(value);
@@ -137,6 +138,7 @@ function createBillingService(dataRoot) {
         balanceMinor: source.balanceMinor,
         reservations: source.reservations,
         chargedOnce: source.chargedOnce,
+        adjustedOnce: source.adjustedOnce,
         createdAt: source.createdAt,
         updatedAt: source.updatedAt
       });
@@ -144,6 +146,7 @@ function createBillingService(dataRoot) {
       delete source.balanceMinor;
       delete source.reservations;
       delete source.chargedOnce;
+      delete source.adjustedOnce;
     }
     source.createdAt ||= new Date().toISOString();
     source.updatedAt ||= source.createdAt;
@@ -688,6 +691,15 @@ function createBillingService(dataRoot) {
     return mutate(async () => {
       const state = await readAccounts();
       const { record, wallet: account } = accountWallet(state, workspaceId, relayId);
+      const onceKey = normalizeBillingOnceKey(metadata.onceKey || metadata.adjustmentOnceKey);
+      if (onceKey && account.adjustedOnce?.[onceKey]) {
+        return {
+          account: publicAccount(workspaceId, relayId, account),
+          transaction: null,
+          adjustmentId: account.adjustedOnce[onceKey],
+          alreadyAdjusted: true
+        };
+      }
       const next = account.balanceMinor + amountMinor;
       if (next < 0) throw new Error('扣减金额不能超过当前余额');
       account.balanceMinor = next;
@@ -704,9 +716,12 @@ function createBillingService(dataRoot) {
         amountMinor,
         balanceMinor: next,
         description: String(metadata.description || (amountMinor > 0 ? '账户充值到账' : '算力余额扣减')).slice(0, 160),
+        reference: String(metadata.reference || '').slice(0, 240),
+        onceKey,
         operatorUserId: String(metadata.operatorUserId || '').slice(0, 80),
         createdAt: account.updatedAt
       };
+      if (onceKey) account.adjustedOnce[onceKey] = entry.id;
       await writeJson(accountsFile, state);
       await appendLedger(entry);
       return { account: publicAccount(workspaceId, relayId, account), transaction: entry };

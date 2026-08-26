@@ -334,6 +334,22 @@ window.caishen = {
   deleteUser: id => authRequest(`/api/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getBillingSummary: (days, relayId = '') => authRequest(`/api/billing/me?days=${encodeURIComponent(Math.max(1, Math.trunc(Number(days) || 30)))}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}`),
   getBillingAdmin: () => authRequest('/api/billing/admin'),
+  getAlipayConfig: () => authRequest('/api/alipay/config'),
+  getAlipayRecharges: () => authRequest('/api/alipay/recharges'),
+  submitAlipayRecharge: payload => authRequest('/api/alipay/recharges', { method: 'POST', body: JSON.stringify(payload) }),
+  getAlipaySettings: () => authRequest('/api/alipay/settings'),
+  saveAlipaySettings: payload => authRequest('/api/alipay/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  uploadAlipayQr: async file => {
+    const form = new FormData();
+    form.append('qr', file);
+    const response = await fetch('/api/alipay/settings/qr', { method: 'POST', body: form });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `请求失败：HTTP ${response.status}`);
+    return body.data;
+  },
+  getAlipayReview: () => authRequest('/api/alipay/review'),
+  approveAlipayRecharge: (id, actualAmountUsd) => authRequest(`/api/alipay/recharges/${encodeURIComponent(id)}/approve`, { method: 'POST', body: JSON.stringify({ actualAmountUsd }) }),
+  rejectAlipayRecharge: (id, reason) => authRequest(`/api/alipay/recharges/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   getBillingAccounting: (options = {}) => {
     const query = new URLSearchParams();
     query.set('range', options.range || 'month');
