@@ -45,15 +45,6 @@ function createAlipayRechargeService(dataRoot, billing) {
     return orderNo;
   }
 
-  function parsePaymentCny(value) {
-    const text = String(value ?? '').trim();
-    if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(text)) throw new Error('请输入正确的实际支付金额，最多保留两位小数');
-    const [whole, fraction = ''] = text.split('.');
-    const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
-    if (!Number.isSafeInteger(cents) || cents <= 0) throw new Error('请输入正确的实际支付金额');
-    return cents;
-  }
-
   async function getSettings() {
     const value = await readJson(settingsFile, {});
     const qrAvailable = Boolean(await fs.stat(qrFile).catch(() => null));
@@ -93,7 +84,8 @@ function createAlipayRechargeService(dataRoot, billing) {
       status: order.status,
       submittedAt: order.submittedAt,
       reviewedAt: order.reviewedAt || '',
-      rejectionReason: order.rejectionReason || ''
+      rejectionReason: order.rejectionReason || '',
+      serviceName: order.relayName || ''
     };
   }
 
@@ -112,8 +104,6 @@ function createAlipayRechargeService(dataRoot, billing) {
     const settings = await getSettings();
     if (!settings.enabled || !settings.qrAvailable) throw new Error('Alipay 当前暂不可用');
     const money = parseUsd(payload.amountUsd);
-    const paidCnyCents = parsePaymentCny(payload.paymentCny);
-    if (paidCnyCents !== money.paymentCnyCents) throw new Error('实际支付金额与本次应付金额不一致');
     const alipayOrderNo = normalizeOrderNo(payload.alipayOrderNo);
     return mutate(async () => {
       const state = await readOrders();

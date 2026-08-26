@@ -17,24 +17,21 @@ test('Alipay 提交校验订单号，审核金额可修正且重复审核不重�
   await billing.adjustBalance('workspace-admin', 'relay-one', 30_000_000, { description: '初始余额' });
 
   await assert.rejects(
-    recharge.createOrder({ amountUsd: '100.001', paymentCny: '700.00', alipayOrderNo: '20260827000000000001' }, context()),
+    recharge.createOrder({ amountUsd: '100.001', alipayOrderNo: '20260827000000000001' }, context()),
     /最多保留两位小数/
   );
   await assert.rejects(
-    recharge.createOrder({ amountUsd: '100.00', paymentCny: '700.00', alipayOrderNo: '错误订单号' }, context()),
+    recharge.createOrder({ amountUsd: '100.00', alipayOrderNo: '错误订单号' }, context()),
     /正确的支付宝订单号/
   );
 
-  await assert.rejects(
-    recharge.createOrder({ amountUsd: '100.00', paymentCny: '10.00', alipayOrderNo: '20260827000000000002' }, context()),
-    /与本次应付金额不一致/
-  );
-  const submitted = await recharge.createOrder({ amountUsd: '100.00', paymentCny: '700.00', alipayOrderNo: '20260827000000000001' }, context());
+  const submitted = await recharge.createOrder({ amountUsd: '100.00', alipayOrderNo: '20260827000000000001' }, context());
   assert.equal(submitted.requestedCreditMinor, 100_000_000);
   assert.equal(submitted.requestedPaymentCnyCents, 70_000);
   assert.equal(submitted.relayId, undefined);
+  assert.equal(submitted.serviceName, '服务一');
   await assert.rejects(
-    recharge.createOrder({ amountUsd: '100.00', paymentCny: '700.00', alipayOrderNo: '20260827000000000001' }, context()),
+    recharge.createOrder({ amountUsd: '100.00', alipayOrderNo: '20260827000000000001' }, context()),
     /已经提交/
   );
 

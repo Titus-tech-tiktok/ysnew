@@ -1101,7 +1101,7 @@ function renderAlipayHistory() {
   if (!list) return;
   list.innerHTML = state.alipayRecharges.length ? state.alipayRecharges.slice(0, 5).map(order => `
     <div class="alipay-history-row ${escapeHtml(order.status)}">
-      <div><b>${escapeHtml(rechargeStatusLabel(order.status))}</b><span>${escapeHtml(formatLocalDateTime(order.submittedAt))} · 订单号 ${escapeHtml(order.alipayOrderNo)}</span>${order.rejectionReason ? `<small>${escapeHtml(order.rejectionReason)}</small>` : ''}</div>
+      <div><b>${escapeHtml(rechargeStatusLabel(order.status))}</b><span>${escapeHtml(order.serviceName || '当前服务')} · ${escapeHtml(formatLocalDateTime(order.submittedAt))} · 订单号 ${escapeHtml(order.alipayOrderNo)}</span>${order.rejectionReason ? `<small>${escapeHtml(order.rejectionReason)}</small>` : ''}</div>
       <strong>${order.status === 'approved' ? `${formatRechargeMoney(order.creditMinor)} 已计入服务余额` : formatRechargeMoney(order.requestedCreditMinor)}</strong>
     </div>`).join('') : '<div class="empty-inline">暂无充值记录</div>';
 }
@@ -1134,6 +1134,8 @@ async function openAlipay() {
   try {
     state.alipayConfig = await window.caishen.getAlipayConfig();
     if (!state.alipayConfig.enabled || !state.alipayConfig.qrAvailable) throw new Error('Alipay 当前暂不可用');
+    const services = Array.isArray(state.alipayConfig.services) ? state.alipayConfig.services : [];
+    $('#alipayService').innerHTML = `<option value="">请选择到账账户</option>${services.map(service => `<option value="${escapeHtml(service.id)}">${escapeHtml(service.name)}</option>`).join('')}`;
     $('#alipayQrImage').src = `${state.alipayConfig.qrUrl}?v=${Date.now()}`;
     $('#alipayQrImage').hidden = false;
     $('#alipayQrEmpty').hidden = true;
@@ -1152,16 +1154,15 @@ function closeAlipay() {
 
 async function submitAlipayRecharge() {
   const amountUsd = String($('#alipayAmountUsd').value || '').trim();
-  const paymentCny = String($('#alipayPaidCny').value || '').trim();
+  const serviceId = String($('#alipayService').value || '').trim();
   const alipayOrderNo = String($('#alipayOrderNo').value || '').replace(/\s+/g, '');
+  if (!serviceId) return toast('请选择充值到账账户', true);
   if (!updateAlipayPaymentAmount()) return toast('请输入正确的充值金额，最多保留两位小数', true);
-  if (!/^\d{1,8}(?:\.\d{1,2})?$/.test(paymentCny) || Math.round(Number(paymentCny) * 100) !== Math.round(Number(amountUsd) * 700)) return toast('实际支付金额与本次应付金额不一致', true);
   if (!/^\d{12,64}$/.test(alipayOrderNo)) return toast('请输入正确的支付宝订单号（12-64 位数字）', true);
   const button = $('#submitAlipayRechargeButton');
   button.disabled = true;
   try {
-    await window.caishen.submitAlipayRecharge({ amountUsd, paymentCny, alipayOrderNo });
-    $('#alipayPaidCny').value = '';
+    await window.caishen.submitAlipayRecharge({ serviceId, amountUsd, alipayOrderNo });
     $('#alipayOrderNo').value = '';
     await loadAlipayHistory();
     $('#alipayCustomerStatus').textContent = '已提交，正在进行到账核验。';

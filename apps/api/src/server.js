@@ -1167,8 +1167,13 @@ async function startServer() {
   app.get('/api/alipay/config', async (req, res) => {
     if (req.user.role !== 'admin' && !isSuperAdmin(req.user)) return res.status(403).json({ error: '当前账号不能使用 Alipay' });
     try {
-      const settings = await alipayRecharge.getSettings();
-      return res.json({ data: { ...settings, qrUrl: settings.qrAvailable ? '/api/alipay/qr' : '' } });
+      const [settings, relayChoices] = await Promise.all([alipayRecharge.getSettings(), runtime.loadRelayChoices(true)]);
+      return res.json({ data: {
+        ...settings,
+        qrUrl: settings.qrAvailable ? '/api/alipay/qr' : '',
+        activeServiceId: relayChoices.activeRelayId,
+        services: relayChoices.relays.map(relay => ({ id: relay.id, name: relay.name, description: relay.description }))
+      } });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }
@@ -1189,7 +1194,9 @@ async function startServer() {
     if (req.user.role !== 'admin') return res.status(403).json({ error: '当前账号不能提交充值核验' });
     try {
       const relayChoices = await runtime.loadRelayChoices(true);
-      const relay = relayChoices.relays.find(item => item.id === relayChoices.activeRelayId);
+      const requestedRelayId = String(req.body?.serviceId || '').trim();
+      const relay = relayChoices.relays.find(item => item.id === requestedRelayId);
+      if (!requestedRelayId) throw new Error('请选择充值到账账户');
       if (!relay) throw new Error('当前服务暂不可用');
       const order = await alipayRecharge.createOrder(req.body || {}, {
         userId: req.user.id,
