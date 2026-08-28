@@ -610,6 +610,9 @@ function mobileFinancePanelHtml() {
   const accounting = mobileFinanceAccountingView();
   const ledgerTotals = mobileFinanceLedgerTotals(accounting);
   const financeEditable = ['yongsha', 'duoxiluka'].includes(state.mobileFinanceBusinessId);
+  const canAddIncome = (state.mobileBusinessHub?.businesses || []).some(
+    item => item.available && ['yongsha', 'duoxiluka'].includes(item.id)
+  );
   const relayNameById = new Map((accounting.relays || []).map(item => [item.relayId, item.relayName]));
   const businessEntries = mobileFinanceBusinessEntries(accounting);
   const visibleEntries = businessEntries.filter(entry => state.mobileFinanceFilter === 'all' || entry.direction === state.mobileFinanceFilter);
@@ -627,7 +630,7 @@ function mobileFinancePanelHtml() {
       </div>
       <div class="mobile-finance-toolbar">
         <div><button type="button" data-finance-filter="all" class="${state.mobileFinanceFilter === 'all' ? 'active' : ''}">全部</button><button type="button" data-finance-filter="income" class="${state.mobileFinanceFilter === 'income' ? 'active' : ''}">收入</button><button type="button" data-finance-filter="expense" class="${state.mobileFinanceFilter === 'expense' ? 'active' : ''}">支出</button></div>
-        ${financeEditable ? '<button type="button" id="mobileFinanceAdd">记收入</button>' : '<span class="mobile-finance-select-hint">选择具体业务后可登记收入</span>'}
+        ${canAddIncome ? '<button type="button" id="mobileFinanceAdd">记收入</button>' : '<span class="mobile-finance-select-hint">暂无可登记收入的业务</span>'}
       </div>
       <div class="mobile-finance-list-head"><h3>账本明细</h3><button type="button" id="mobileFinanceExport">导出 CSV</button></div>
       <div class="mobile-finance-list">${entryHtml}</div>
@@ -685,14 +688,23 @@ function exportMobileFinanceCsv() {
 
 function openMobileFinanceDialog(entry = null) {
   const editing = Boolean(entry?.id);
-  const businessId = state.mobileFinanceBusinessId;
-  if (!['yongsha', 'duoxiluka'].includes(businessId)) return toast('请先选择练锐或永沙', true);
-  const businessName = mobileBusinessDisplayName(businessId);
+  const availableBusinesses = (state.mobileBusinessHub?.businesses || []).filter(
+    item => item.available && ['yongsha', 'duoxiluka'].includes(item.id)
+  );
+  if (!availableBusinesses.length) return toast('暂无可登记收入的业务', true);
+  const fixedBusinessId = entry?.businessId
+    || (['yongsha', 'duoxiluka'].includes(state.mobileFinanceBusinessId) ? state.mobileFinanceBusinessId : '');
+  const initialBusinessId = fixedBusinessId || availableBusinesses[0].id;
+  const businessName = editing ? mobileBusinessDisplayName(initialBusinessId) : '业务收入';
+  const businessField = editing
+    ? `<label><span>计入业务</span><input value="${escapeHtml(mobileBusinessDisplayName(initialBusinessId))}" disabled></label>`
+    : `<label><span>计入业务</span><select data-finance-business>${availableBusinesses.map(item => `<option value="${escapeHtml(item.id)}"${item.id === initialBusinessId ? ' selected' : ''}>${escapeHtml(mobileBusinessDisplayName(item.id, item.name))}</option>`).join('')}</select></label>`;
   const element = document.createElement('div');
   element.className = 'mobile-finance-modal-backdrop';
   element.innerHTML = `<section class="mobile-finance-modal" role="dialog" aria-modal="true" aria-labelledby="mobileFinanceDialogTitle">
     <header><div><span>${escapeHtml(businessName)}</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑收入' : '登记收入'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
     <div class="mobile-finance-form">
+      ${businessField}
       <label><span>日期</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
       <label><span>收入金额（CNY）</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.amountCnyMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
       <label class="wide"><span>收入来源</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="例如：客户服务收入"></label>
@@ -707,7 +719,7 @@ function openMobileFinanceDialog(entry = null) {
     if (event.target.closest('[data-finance-delete]')) {
       if (!window.confirm('确定删除这条财务记录吗？')) return;
       try {
-        await window.caishen.saveBusinessFinanceEntry({ businessId, action: 'delete', id: entry.id });
+        await window.caishen.saveBusinessFinanceEntry({ businessId: initialBusinessId, action: 'delete', id: entry.id });
         close();
         await loadMobileFinanceLedger();
         toast('收入记录已删除');
@@ -716,6 +728,10 @@ function openMobileFinanceDialog(entry = null) {
     }
     const saveButton = event.target.closest('[data-finance-save]');
     if (!saveButton) return;
+    const businessId = editing
+      ? initialBusinessId
+      : element.querySelector('[data-finance-business]')?.value;
+    if (!['yongsha', 'duoxiluka'].includes(businessId)) return toast('请选择收入计入的业务', true);
     const payload = {
       date: element.querySelector('[data-finance-date]').value,
       category: 'other_income',

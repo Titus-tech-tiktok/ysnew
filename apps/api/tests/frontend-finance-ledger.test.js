@@ -37,11 +37,14 @@ test('mobile ledger filters businesses and uses manual income minus actual API c
   assert.match(renderer, /saveBusinessFinanceEntry/);
 });
 
-test('income dialog only records manual income for the selected business', async () => {
+test('income dialog records manual income and lets the all-business view choose its target', async () => {
   const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
   const dialog = renderer.match(/function openMobileFinanceDialog\(entry = null\)[\s\S]*?\n\}/)?.[0] || '';
 
-  assert.match(dialog, /请先选择练锐或永沙/);
+  assert.match(dialog, /data-finance-business/);
+  assert.match(dialog, /计入业务/);
+  assert.match(dialog, /availableBusinesses/);
+  assert.match(dialog, /请选择收入计入的业务/);
   assert.match(dialog, /收入金额（CNY）/);
   assert.match(dialog, /category: 'other_income'/);
   assert.match(dialog, /currency: 'CNY'/);
