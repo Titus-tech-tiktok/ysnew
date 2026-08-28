@@ -373,8 +373,13 @@ window.caishen = {
     query.set('range', options.range || 'month');
     if (options.startDate) query.set('startDate', options.startDate);
     if (options.endDate) query.set('endDate', options.endDate);
+    if (options.includeRecharges === false) query.set('includeRecharges', '0');
     return authRequest(`/api/business-hub/overview?${query}`);
   },
+  saveBusinessFinanceEntry: payload => authRequest('/api/business-hub/finance-entry-action', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
   reviewBusinessRecharge: payload => authRequest('/api/business-hub/recharge-action', {
     method: 'POST',
     body: JSON.stringify(payload)

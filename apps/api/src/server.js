@@ -1057,6 +1057,16 @@ async function startServer() {
     }
   });
 
+  app.post('/api/internal/business/finance-entry-action', async (req, res) => {
+    const verification = verifyBusinessRequest(req);
+    if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
+    try {
+      return res.json({ data: sealBusinessData(await businessSnapshot.financeEntryAction(req.body || {})) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
   app.post('/api/internal/business/alipay-config', async (req, res) => {
     const verification = verifyBusinessRequest(req);
     if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
@@ -1537,6 +1547,27 @@ async function startServer() {
         ? await businessSnapshot.rechargeAction(payload, req.user.id)
         : businessId === 'duoxiluka' && DUOXI_BUSINESS_URL
           ? await requestBusiness(DUOXI_BUSINESS_URL, '/api/internal/business/recharge-action', payload)
+          : null;
+      if (!data) return res.status(400).json({ error: '业务账户不可用' });
+      return res.json({ data: { ...data, businessId } });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/business-hub/finance-entry-action', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权修改经营收入' });
+    try {
+      const businessId = String(req.body?.businessId || '');
+      const payload = {
+        action: String(req.body?.action || ''),
+        id: String(req.body?.id || ''),
+        entry: req.body?.entry || {}
+      };
+      const data = businessId === 'yongsha'
+        ? await businessSnapshot.financeEntryAction(payload)
+        : businessId === 'duoxiluka' && DUOXI_BUSINESS_URL
+          ? await requestBusiness(DUOXI_BUSINESS_URL, '/api/internal/business/finance-entry-action', payload)
           : null;
       if (!data) return res.status(400).json({ error: '业务账户不可用' });
       return res.json({ data: { ...data, businessId } });

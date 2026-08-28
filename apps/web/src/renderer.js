@@ -128,7 +128,7 @@ const state = {
   mobileBusinessHub: null,
   mobileFinanceBusinessId: 'all',
   mobileFinanceExpanded: false,
-  mobileFinanceRange: 'month',
+  mobileFinanceRange: 'today',
   mobileFinanceRelayId: '',
   mobileFinanceStartDate: '',
   mobileFinanceEndDate: '',
@@ -428,10 +428,10 @@ function ensureMobileStatsPage() {
       <header class="mobile-stats-header">
         <div>
           <span>PRIVATE FINANCE</span>
-          <h1>经营数据中心</h1>
-          <p id="mobileStatsUpdatedAt">Loading latest data</p>
+          <h1>经营账本</h1>
+          <p id="mobileStatsUpdatedAt">正在读取最新数据</p>
         </div>
-        <button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="Refresh">Refresh</button>
+        <button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="刷新">刷新</button>
       </header>
       <div id="mobileStatsContent" class="mobile-stats-content">
         <div class="mobile-stats-loading">Loading analytics...</div>
@@ -488,42 +488,50 @@ function financeCategoryLabel(category) {
 }
 
 function mobileFinanceRangeLabel(range = state.mobileFinanceRange) {
-  return ({ today: '今天', '7d': '近 7 天', month: '本月', last_month: '上月', custom: '自定义日期' })[range] || '本月';
+  return ({ today: '今天', yesterday: '昨天', '7d': '近 7 天', month: '本月' })[range] || '今天';
+}
+
+function mobileBusinessDisplayName(id, fallback = '') {
+  return ({ yongsha: '永沙', duoxiluka: '练锐' })[String(id || '')] || fallback || '当前业务';
+}
+
+function mobileFinanceLedgerTotals(accounting = {}) {
+  const manualIncomeCnyMinor = Number(accounting.finance?.summary?.otherIncomeCnyMinor) || 0;
+  const actualConsumptionCnyMinor = Number(accounting.totals?.confirmedRevenueCnyMinor) || 0;
+  const balanceUsdMinor = (accounting.relays || []).reduce(
+    (sum, relay) => sum + (Number(relay.customerBalanceUsdMinor) || 0), 0
+  );
+  const consumptionUsdMinor = (accounting.relays || []).reduce(
+    (sum, relay) => sum + (Number(relay.confirmedSpendUsdMinor) || 0), 0
+  );
+  return {
+    manualIncomeCnyMinor,
+    actualConsumptionCnyMinor,
+    netProfitCnyMinor: manualIncomeCnyMinor - actualConsumptionCnyMinor,
+    balanceUsdMinor,
+    consumptionUsdMinor
+  };
 }
 
 function mobileFinanceBusinessEntries(accounting = state.mobileAccounting || {}) {
   const rows = [];
   for (const point of accounting.daily || []) {
-    if (Number(point.customerTopupCnyMinor) > 0) {
+    if (Number(point.revenueCnyMinor) > 0) {
       rows.push({
-        id: `income-${point.relayId}-${point.date}`,
-        automatic: true,
-        direction: 'income',
-        date: point.date,
-        relayId: point.relayId,
-        relayName: point.relayName,
-        title: '客户充值收入',
-        detail: '站内充值自动同步，内部划拨已排除',
-        amountCnyMinor: Number(point.customerTopupCnyMinor) || 0
-      });
-    }
-    if (Number(point.successfulImages) > 0) {
-      rows.push({
-        id: `cost-${point.relayId}-${point.date}`,
+        id: `consumption-${point.relayId}-${point.date}`,
         automatic: true,
         direction: 'expense',
         date: point.date,
         relayId: point.relayId,
         relayName: point.relayName,
-        title: '上游生图成本',
-        detail: point.costConfigured ? `${formatInteger(point.successfulImages)} 张 × 单张采购成本` : '尚未配置单张采购成本',
-        amountCnyMinor: Number(point.upstreamCostCnyMinor) || 0,
-        amountPending: !point.costConfigured
+        title: 'API 实际消耗',
+        detail: `${formatInteger(point.successfulImages)} 张 · 系统自动统计`,
+        amountCnyMinor: Number(point.revenueCnyMinor) || 0
       });
     }
   }
   for (const entry of accounting.finance?.entries || []) {
-    if (entry.direction !== 'expense' && entry.category !== 'other_income') continue;
+    if (entry.category !== 'other_income') continue;
     rows.push({
       ...entry,
       automatic: false,
@@ -591,17 +599,6 @@ function mobileFinanceAccountingView() {
   };
 }
 
-function mobileRechargeReviewHtml() {
-  const recharges = (state.mobileBusinessHub?.recharges || [])
-    .filter(order => state.mobileFinanceBusinessId === 'all' || order.businessId === state.mobileFinanceBusinessId);
-  if (!recharges.length) return '<div class="mobile-finance-empty">暂无充值核验记录</div>';
-  return recharges.slice(0, 100).map(order => `
-    <article class="mobile-finance-recharge ${escapeHtml(order.status)}" data-mobile-recharge="${escapeHtml(order.id)}" data-business-id="${escapeHtml(order.businessId)}">
-      <div><b>${escapeHtml(order.displayName || order.username || '账户')} · ${escapeHtml(order.businessName || '')}</b><span>订单号 ${escapeHtml(order.alipayOrderNo)} · ${escapeHtml(formatLocalDateTime(order.submittedAt))}</span><small>申请 ${formatRechargeMoney(order.requestedCreditMinor)} · ${rechargeStatusLabel(order.status)}</small></div>
-      ${order.status === 'pending' ? `<label><span>确认入账（USD）</span><input data-mobile-recharge-amount type="number" min="1" max="1000000" step="0.01" value="${(Number(order.requestedCreditMinor || 0) / BILLING_AMOUNT_SCALE).toFixed(2)}"></label><div class="inline-actions"><button class="secondary danger-outline" data-mobile-recharge-reject type="button">未核验到款</button><button class="primary" data-mobile-recharge-approve type="button">确认到账</button></div>` : `<strong>${order.status === 'approved' ? `已入账 ${formatRechargeMoney(order.creditMinor)}` : escapeHtml(order.rejectionReason || '未通过')}</strong>`}
-    </article>`).join('');
-}
-
 function mobileFinancePanelHtml() {
   if (!state.mobileFinanceExpanded) return '';
   if (state.mobileFinanceLoading) {
@@ -611,78 +608,30 @@ function mobileFinancePanelHtml() {
     return `<section class="mobile-finance-panel"><div class="mobile-finance-loading error">${escapeHtml(state.mobileFinanceError)}</div></section>`;
   }
   const accounting = mobileFinanceAccountingView();
-  const accountingTotals = accounting.totals || {};
-  const finance = accounting.finance || { entries: [], summary: {} };
-  const financeSummary = finance.summary || {};
-  const financeEditable = state.mobileFinanceBusinessId === 'yongsha';
-  const businesses = (state.mobileBusinessHub?.businesses || []).map(item => ({ id: item.id, name: item.name, available: item.available }));
+  const ledgerTotals = mobileFinanceLedgerTotals(accounting);
+  const financeEditable = ['yongsha', 'duoxiluka'].includes(state.mobileFinanceBusinessId);
   const relayNameById = new Map((accounting.relays || []).map(item => [item.relayId, item.relayName]));
-  const relayCards = (accounting.relays || []).map(relay => {
-    return `<article class="mobile-finance-relay-card">
-      <header><div><span>服务账户</span><h3>${escapeHtml(relay.relayName)}</h3></div><b>${formatInteger(relay.successfulImages)} 张</b></header>
-      <dl>
-        <div><dt>客户累计充值</dt><dd>${formatFinanceCny(relay.customerRechargeCnyMinor)}</dd></div>
-        <div><dt>客户未消费余额</dt><dd>${formatFinanceCny(relay.customerBalanceCnyMinor)}</dd></div>
-        <div><dt>期间充值收入</dt><dd>${formatFinanceCny(relay.customerTopupCnyMinor)}</dd></div>
-        <div><dt>期间客户已消费</dt><dd>${formatFinanceCny(relay.confirmedRevenueCnyMinor)}</dd></div>
-        <div><dt>期间上游成本</dt><dd>${relay.costConfigured ? formatFinanceCny(relay.upstreamCostCnyMinor) : '待配置'}</dd></div>
-      </dl>
-      <p>站内折算 ${escapeHtml(relay.customerCnyPerUsd)} 元/美元 · 上游 ${formatFinanceCnyMicro(relay.upstreamImageCostCnyMicro)}/张</p>
-    </article>`;
-  }).join('') || '<div class="mobile-finance-empty">暂无服务账户经营数据</div>';
   const businessEntries = mobileFinanceBusinessEntries(accounting);
   const visibleEntries = businessEntries.filter(entry => state.mobileFinanceFilter === 'all' || entry.direction === state.mobileFinanceFilter);
   const entryHtml = visibleEntries.length ? visibleEntries.map(entry => `
     <${entry.automatic || !financeEditable ? 'div' : 'button'} class="mobile-finance-entry"${entry.automatic || !financeEditable ? '' : ` type="button" data-finance-entry-id="${escapeHtml(entry.id)}"`}>
       <span class="mobile-finance-entry-icon ${escapeHtml(entry.direction)}">${entry.direction === 'income' ? '+' : entry.direction === 'expense' ? '−' : '↔'}</span>
       <span class="mobile-finance-entry-copy"><b>${escapeHtml(entry.title)}</b><small>${escapeHtml(entry.date)} · ${escapeHtml(relayNameById.get(entry.relayId) || entry.relayName || '公共账目')} · ${escapeHtml(entry.detail)}</small></span>
-      <span class="mobile-finance-entry-money ${escapeHtml(entry.direction)}"><b>${entry.amountPending ? '待配置' : `${entry.direction === 'income' ? '+' : '-'}${formatFinanceCny(entry.amountCnyMinor)}`}</b><small>${entry.automatic ? '系统自动统计' : '手工记录'}</small></span>
+      <span class="mobile-finance-entry-money ${escapeHtml(entry.direction)}"><b>${entry.direction === 'income' ? '+' : '-'}${formatFinanceCny(entry.amountCnyMinor)}</b><small>${entry.automatic ? '系统自动统计' : '手工记录'}</small></span>
     </${entry.automatic || !financeEditable ? 'div' : 'button'}>`).join('') : '<div class="mobile-finance-empty">所选时间暂时没有符合条件的收支记录</div>';
-  const manualEntries = (finance.entries || []).map(entry => `
-    <${financeEditable ? 'button' : 'div'} class="mobile-finance-entry compact"${financeEditable ? ` type="button" data-finance-entry-id="${escapeHtml(entry.id)}"` : ''}>
-      <span class="mobile-finance-entry-icon ${escapeHtml(entry.direction)}">${entry.direction === 'income' ? '+' : entry.direction === 'expense' ? '−' : '↔'}</span>
-      <span class="mobile-finance-entry-copy"><b>${escapeHtml(entry.counterparty || financeCategoryLabel(entry.category))}</b><small>${escapeHtml(entry.date)} · ${escapeHtml(financeCategoryLabel(entry.category))}${entry.relayId ? ` · ${escapeHtml(relayNameById.get(entry.relayId) || entry.relayId)}` : ' · 公共账目'}</small></span>
-      <span class="mobile-finance-entry-money ${escapeHtml(entry.direction)}"><b>${formatFinanceCny(entry.amountCnyMinor)}</b><small>${financeEditable ? '点击编辑' : '只读记录'}</small></span>
-    </${financeEditable ? 'button' : 'div'}>`).join('') || '<div class="mobile-finance-empty">所选时间没有手工资金记录</div>';
-  const rangeOptions = Object.entries({ today: '今天', '7d': '近 7 天', month: '本月', last_month: '上月', custom: '自定义日期' });
-  const hasMissingCost = !accounting.complete && Number(accountingTotals.successfulImages) > 0;
   return `
     <section class="mobile-finance-panel">
-      <header class="mobile-finance-head">
-        <div><span>私密财务</span><h2>经营账本</h2><p>永沙与多嘻噜卡统一查看</p></div>
-        <div class="mobile-finance-selectors">
-          <label><span>时间</span><select id="mobileFinanceRange">${rangeOptions.map(([value, label]) => `<option value="${value}"${value === state.mobileFinanceRange ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
-          <label><span>业务</span><select id="mobileFinanceBusiness"><option value="all">全部业务</option>${businesses.map(item => `<option value="${escapeHtml(item.id)}"${item.id === state.mobileFinanceBusinessId ? ' selected' : ''}>${escapeHtml(item.name)}${item.available ? '' : '（未连接）'}</option>`).join('')}</select></label>
-        </div>
-      </header>
-      ${state.mobileFinanceRange === 'custom' ? `<div class="mobile-finance-custom-range"><label><span>开始日期</span><input id="mobileFinanceStartDate" type="date" value="${escapeHtml(state.mobileFinanceStartDate)}"></label><label><span>结束日期</span><input id="mobileFinanceEndDate" type="date" value="${escapeHtml(state.mobileFinanceEndDate)}"></label></div>` : ''}
-      <div class="mobile-finance-kpis simple">
-        <article><span>营业收入</span><strong>${formatFinanceCny(accountingTotals.businessRevenueCnyMinor)}</strong><small>客户充值 + 其他收入</small></article>
-        <article><span>总支出</span><strong>${hasMissingCost ? '成本未配齐' : formatFinanceCny(accountingTotals.totalExpensesCnyMinor)}</strong><small>上游成本 + 杂费</small></article>
-        <article class="profit"><span>预估利润</span><strong>${hasMissingCost ? '请补全成本' : formatFinanceCny(accountingTotals.netProfitCnyMinor)}</strong><small>收入 - 支出</small></article>
+      <div class="mobile-finance-kpis simple mobile-finance-summary-kpis">
+        <article><span>手工收入</span><strong>${formatFinanceCny(ledgerTotals.manualIncomeCnyMinor)}</strong><small>仅统计你登记的收入</small></article>
+        <article class="profit"><span>预估利润</span><strong>${formatFinanceCny(ledgerTotals.netProfitCnyMinor)}</strong><small>手工收入 − 实际消耗</small></article>
       </div>
-      <p class="mobile-finance-brief">${escapeHtml(mobileFinanceRangeLabel())} · ${escapeHtml(state.mobileFinanceBusinessId === 'all' ? '全部业务' : (businesses.find(item => item.id === state.mobileFinanceBusinessId)?.name || '当前业务'))} · 生图记录 ${formatInteger(accountingTotals.successfulImages)} 张 · 上游请求 ${formatInteger(state.mobileFinanceBusinessId === 'all' ? state.mobileBusinessHub?.totals?.upstreamRequestCount : state.mobileBusinessHub?.businesses?.find(item => item.id === state.mobileFinanceBusinessId)?.upstreamRequests?.count)} 次</p>
       <div class="mobile-finance-toolbar">
         <div><button type="button" data-finance-filter="all" class="${state.mobileFinanceFilter === 'all' ? 'active' : ''}">全部</button><button type="button" data-finance-filter="income" class="${state.mobileFinanceFilter === 'income' ? 'active' : ''}">收入</button><button type="button" data-finance-filter="expense" class="${state.mobileFinanceFilter === 'expense' ? 'active' : ''}">支出</button></div>
-        ${state.mobileFinanceBusinessId === 'yongsha' ? '<button type="button" id="mobileFinanceAdd">记一笔</button>' : '<span></span>'}
+        ${financeEditable ? '<button type="button" id="mobileFinanceAdd">记收入</button>' : '<span class="mobile-finance-select-hint">选择具体业务后可登记收入</span>'}
       </div>
-      <div class="mobile-finance-list-head"><h3>收支流水</h3><button type="button" id="mobileFinanceExport">导出 CSV</button></div>
+      <div class="mobile-finance-list-head"><h3>账本明细</h3><button type="button" id="mobileFinanceExport">导出 CSV</button></div>
       <div class="mobile-finance-list">${entryHtml}</div>
-      <div class="mobile-finance-list-head"><h3>充值核验</h3><span>两项业务统一处理</span></div>
-      <div class="mobile-finance-recharge-list">${mobileRechargeReviewHtml()}</div>
-      <details class="mobile-finance-details" id="mobileFinanceDetails"${state.mobileFinanceDetailsExpanded ? ' open' : ''}>
-        <summary>资金与成本详情</summary>
-        <p class="mobile-finance-cost-note">站内客户充值会自动计入营业收入，管理员与员工之间的内部划拨不计收入；客户已消费金额只展示经营进度，不再重复算收入。上游充值属于预付资金，不重复算作经营支出。</p>
-        <div class="mobile-finance-detail-totals">
-          <div><span>客户已消费金额</span><strong>${formatFinanceCny(accountingTotals.confirmedRevenueCnyMinor)}</strong></div>
-          <div><span>上游生图成本</span><strong>${hasMissingCost ? '待配置' : formatFinanceCny(accountingTotals.upstreamCostCnyMinor)}</strong></div>
-          <div><span>期间杂费</span><strong>${formatFinanceCny(accountingTotals.operatingExpensesCnyMinor)}</strong></div>
-          <div><span>期间上游充值</span><strong>${formatFinanceCny(financeSummary.gatewayTopupsCnyMinor)}</strong></div>
-        </div>
-        <div class="mobile-finance-relay-list">${relayCards}</div>
-        <div class="mobile-finance-list-head"><h3>手工资金记录</h3><span>点击记录可编辑</span></div>
-        <div class="mobile-finance-list">${manualEntries}</div>
-      </details>
+      <p class="mobile-finance-cost-note">支出由系统按照实际 API 消耗自动记录，收入只采用手工登记。</p>
     </section>`;
 }
 
@@ -696,7 +645,8 @@ async function loadMobileFinanceLedger() {
     state.mobileBusinessHub = await window.caishen.getBusinessHubOverview({
       range: state.mobileFinanceRange,
       startDate: state.mobileFinanceStartDate,
-      endDate: state.mobileFinanceEndDate
+      endDate: state.mobileFinanceEndDate,
+      includeRecharges: false
     });
     if (state.mobileFinanceBusinessId !== 'all' && !state.mobileBusinessHub.businesses?.some(item => item.id === state.mobileFinanceBusinessId && item.available)) {
       state.mobileFinanceBusinessId = 'all';
@@ -708,34 +658,6 @@ async function loadMobileFinanceLedger() {
   } finally {
     state.mobileFinanceLoading = false;
     renderMobileStats();
-  }
-}
-
-async function handleMobileRechargeReview(event) {
-  const row = event.target.closest('[data-mobile-recharge]');
-  if (!row) return;
-  const businessId = row.dataset.businessId;
-  const id = row.dataset.mobileRecharge;
-  const rejectButton = event.target.closest('[data-mobile-recharge-reject]');
-  const approveButton = event.target.closest('[data-mobile-recharge-approve]');
-  if (!rejectButton && !approveButton) return;
-  try {
-    if (rejectButton) {
-      const reason = await brandPrompt('填写未通过原因', '未核验到对应款项', { inputLabel: '原因' });
-      if (reason === null) return;
-      await window.caishen.reviewBusinessRecharge({ businessId, id, action: 'reject', reason });
-      toast('已更新核验结果');
-    } else {
-      const actualAmountUsd = String(row.querySelector('[data-mobile-recharge-amount]')?.value || '').trim();
-      if (!/^\d+(?:\.\d{1,2})?$/.test(actualAmountUsd) || Number(actualAmountUsd) < 1) {
-        return toast('请输入正确的到账额度', true);
-      }
-      await window.caishen.reviewBusinessRecharge({ businessId, id, action: 'approve', actualAmountUsd });
-      toast(`充值成功，$${Number(actualAmountUsd).toFixed(2)} 已入账`);
-    }
-    await Promise.all([loadMobileFinanceLedger(), loadBillingSummary()]);
-  } catch (error) {
-    toast(errorText(error), true);
   }
 }
 
@@ -763,60 +685,32 @@ function exportMobileFinanceCsv() {
 
 function openMobileFinanceDialog(entry = null) {
   const editing = Boolean(entry?.id);
-  const category = entry?.category || 'other_income';
-  const currency = entry?.currency || 'CNY';
-  const accountingRelays = state.relayChoices?.relays || state.mobileAccounting?.relays || [];
+  const businessId = state.mobileFinanceBusinessId;
+  if (!['yongsha', 'duoxiluka'].includes(businessId)) return toast('请先选择练锐或永沙', true);
+  const businessName = mobileBusinessDisplayName(businessId);
   const element = document.createElement('div');
   element.className = 'mobile-finance-modal-backdrop';
   element.innerHTML = `<section class="mobile-finance-modal" role="dialog" aria-modal="true" aria-labelledby="mobileFinanceDialogTitle">
-    <header><div><span>财务记录</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑记录' : '新增记录'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
+    <header><div><span>${escapeHtml(businessName)}</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑收入' : '登记收入'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
     <div class="mobile-finance-form">
       <label><span>日期</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
-      <label><span>分类</span><select data-finance-category>
-        <optgroup label="收入"><option value="other_income" ${category === 'other_income' ? 'selected' : ''}>其他收入（非站内充值）</option></optgroup>
-        <optgroup label="资金操作"><option value="gateway_topup" ${category === 'gateway_topup' ? 'selected' : ''}>上游充值（不计利润）</option></optgroup>
-        <optgroup label="经营支出">${Object.entries({ development: '开发费用', advertising: '推广费用', labor: '人工费用', membership: '会员费', server: '服务器费用', software: '软件费用', refund: '退款', other_expense: '其他支出' }).map(([value, label]) => `<option value="${value}" ${value === category ? 'selected' : ''}>${label}</option>`).join('')}</optgroup>
-        ${category === 'client_payment' ? '<optgroup label="历史记录"><option value="client_payment" selected>客户充值（旧手工记录，不计利润）</option></optgroup>' : ''}
-      </select></label>
-      <p class="wide mobile-finance-category-hint" data-finance-category-hint></p>
-      <label class="wide"><span>项目或客户</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="例如：张先生充值、8 月服务器"></label>
-      <label><span>金额</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.originalAmountMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
-      <label><span>币种</span><select data-finance-currency><option value="CNY" ${currency === 'CNY' ? 'selected' : ''}>人民币 CNY</option><option value="USD" ${currency === 'USD' ? 'selected' : ''}>美元 USD</option></select></label>
-      <label><span>归属中转站</span><select data-finance-relay><option value="">公共账目 / 不分站</option>${accountingRelays.map(relay => { const relayId = relay.id || relay.relayId; return `<option value="${escapeHtml(relayId)}"${relayId === entry?.relayId ? ' selected' : ''}>${escapeHtml(relay.name || relay.relayName)}</option>`; }).join('')}</select></label>
-      <label data-finance-rate-field><span>美元汇率</span><input data-finance-rate inputmode="decimal" value="${escapeHtml(entry?.exchangeRate || 7)}"></label>
+      <label><span>收入金额（CNY）</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.amountCnyMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
+      <label class="wide"><span>收入来源</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="例如：客户服务收入"></label>
       <label class="wide"><span>备注</span><textarea data-finance-note rows="3" maxlength="500" placeholder="可选">${escapeHtml(entry?.note || '')}</textarea></label>
     </div>
     <footer>${editing ? '<button class="danger" type="button" data-finance-delete>删除</button>' : '<span></span>'}<div><button class="secondary" type="button" data-finance-close>取消</button><button class="primary" type="button" data-finance-save>保存</button></div></footer>
   </section>`;
   document.body.appendChild(element);
-  const currencyInput = element.querySelector('[data-finance-currency]');
-  const categoryInput = element.querySelector('[data-finance-category]');
-  const categoryHint = element.querySelector('[data-finance-category-hint]');
-  const rateField = element.querySelector('[data-finance-rate-field]');
-  const updateRateVisibility = () => { rateField.hidden = currencyInput.value !== 'USD'; };
-  const updateCategoryHint = () => {
-    categoryHint.textContent = categoryInput.value === 'gateway_topup'
-      ? '上游充值只记录预付资金，不重复计入当期支出和利润。'
-      : categoryInput.value === 'other_income'
-        ? '站内客户充值已由系统自动统计，这里只记录其他收入，避免重复入账。'
-        : categoryInput.value === 'client_payment'
-          ? '这是旧版手工记录，保留查账，不再重复计入利润。'
-          : '这笔记录会计入当期经营支出。';
-  };
-  updateRateVisibility();
-  updateCategoryHint();
-  currencyInput.onchange = updateRateVisibility;
-  categoryInput.onchange = updateCategoryHint;
   const close = () => element.remove();
   element.addEventListener('click', async event => {
     if (event.target === element || event.target.closest('[data-finance-close]')) return close();
     if (event.target.closest('[data-finance-delete]')) {
       if (!window.confirm('确定删除这条财务记录吗？')) return;
       try {
-        await window.caishen.deleteFinanceEntry(entry.id);
+        await window.caishen.saveBusinessFinanceEntry({ businessId, action: 'delete', id: entry.id });
         close();
         await loadMobileFinanceLedger();
-        toast('财务记录已删除');
+        toast('收入记录已删除');
       } catch (error) { toast(errorText(error), true); }
       return;
     }
@@ -824,21 +718,25 @@ function openMobileFinanceDialog(entry = null) {
     if (!saveButton) return;
     const payload = {
       date: element.querySelector('[data-finance-date]').value,
-      category: element.querySelector('[data-finance-category]').value,
+      category: 'other_income',
       counterparty: element.querySelector('[data-finance-counterparty]').value,
       amount: element.querySelector('[data-finance-amount]').value,
-      currency: currencyInput.value,
-      relayId: element.querySelector('[data-finance-relay]').value,
-      exchangeRate: element.querySelector('[data-finance-rate]').value,
+      currency: 'CNY',
+      relayId: '',
+      exchangeRate: 1,
       note: element.querySelector('[data-finance-note]').value
     };
     saveButton.disabled = true;
     try {
-      if (editing) await window.caishen.updateFinanceEntry(entry.id, payload);
-      else await window.caishen.createFinanceEntry(payload);
+      await window.caishen.saveBusinessFinanceEntry({
+        businessId,
+        action: editing ? 'update' : 'create',
+        id: editing ? entry.id : '',
+        entry: payload
+      });
       close();
       await loadMobileFinanceLedger();
-      toast(editing ? '财务记录已更新' : '财务记录已添加');
+      toast(editing ? '收入记录已更新' : '收入记录已添加');
     } catch (error) {
       saveButton.disabled = false;
       toast(errorText(error), true);
@@ -846,7 +744,7 @@ function openMobileFinanceDialog(entry = null) {
   });
 }
 
-function renderMobileStats() {
+function renderLegacyMobileStats() {
   const container = $('#mobileStatsContent');
   if (!container) return;
   const stats = state.mobileStats;
@@ -1008,34 +906,132 @@ function renderMobileStats() {
   });
 }
 
+function renderMobileStats() {
+  const container = $('#mobileStatsContent');
+  if (!container) return;
+  if (state.mobileFinanceLoading && !state.mobileBusinessHub) {
+    container.innerHTML = '<div class="mobile-stats-loading">正在读取经营数据…</div>';
+    return;
+  }
+  if (state.mobileFinanceError && !state.mobileBusinessHub) {
+    container.innerHTML = `<div class="mobile-stats-loading error">${escapeHtml(state.mobileFinanceError)}</div>`;
+    return;
+  }
+  const hub = state.mobileBusinessHub;
+  if (!hub) {
+    container.innerHTML = '<div class="mobile-stats-loading">暂无经营数据</div>';
+    return;
+  }
+  const ranges = [
+    { key: 'today', label: '今天' },
+    { key: 'yesterday', label: '昨天' },
+    { key: '7d', label: '近 7 天' },
+    { key: 'month', label: '本月' }
+  ];
+  const businesses = (hub.businesses || []).map(item => ({
+    ...item,
+    displayName: mobileBusinessDisplayName(item.id, item.name)
+  }));
+  const availableBusinesses = businesses.filter(item => item.available && item.accounting);
+  const selectedBusiness = state.mobileFinanceBusinessId === 'all'
+    ? null
+    : availableBusinesses.find(item => item.id === state.mobileFinanceBusinessId);
+  const accounting = mobileFinanceAccountingView();
+  const ledgerTotals = mobileFinanceLedgerTotals(accounting);
+  const requestCount = selectedBusiness
+    ? Number(selectedBusiness.upstreamRequests?.count) || 0
+    : availableBusinesses.reduce((sum, item) => sum + (Number(item.upstreamRequests?.count) || 0), 0);
+  const balanceBreakdown = state.mobileFinanceBusinessId === 'all'
+    ? availableBusinesses.map(item => {
+      const balance = mobileFinanceLedgerTotals(item.accounting).balanceUsdMinor;
+      return `${mobileBusinessDisplayName(item.id, item.name)} ${formatMobileStatsMoney(balance)}`;
+    }).join(' · ')
+    : `${mobileBusinessDisplayName(selectedBusiness?.id, selectedBusiness?.name)}团队当前余额`;
+  const selectedRange = ranges.find(item => item.key === state.mobileFinanceRange) || ranges[0];
+  state.mobileAccounting = accounting;
+  state.mobileFinanceData = accounting.finance;
+  const updatedNode = $('#mobileStatsUpdatedAt');
+  if (updatedNode) updatedNode.textContent = state.mobileStatsUpdatedAt
+    ? `更新于 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}`
+    : '数据已同步';
+  container.innerHTML = `
+    <section class="mobile-ledger-filter-card">
+      <label for="mobileFinanceBusiness"><span>业务</span><select id="mobileFinanceBusiness"><option value="all">全部业务</option>${businesses.map(item => `<option value="${escapeHtml(item.id)}"${item.id === state.mobileFinanceBusinessId ? ' selected' : ''}${item.available ? '' : ' disabled'}>${escapeHtml(item.displayName)}${item.available ? '' : '（未连接）'}</option>`).join('')}</select></label>
+      <span class="mobile-ledger-filter-label">时间</span>
+      <nav class="mobile-stats-range-switch" aria-label="选择统计时间">
+        ${ranges.map(item => `<button type="button" data-mobile-stats-range="${item.key}" class="${item.key === selectedRange.key ? 'active' : ''}">${escapeHtml(item.label)}</button>`).join('')}
+      </nav>
+    </section>
+    <section class="mobile-ledger-balance-card">
+      <div><span>团队当前可用余额</span><strong>${formatMobileStatsMoney(ledgerTotals.balanceUsdMinor)}</strong><p>${escapeHtml(balanceBreakdown || '暂无可用业务余额')}</p></div>
+      <b>${formatInteger(requestCount)} 次请求</b>
+    </section>
+    <section class="mobile-ledger-primary-metrics">
+      <article><span>实际消耗</span><strong class="expense">${formatMobileStatsMoney(ledgerTotals.consumptionUsdMinor)}</strong><small>来自 API 实际扣费</small></article>
+      <article><span>API 请求</span><strong>${formatInteger(requestCount)}</strong><small>${escapeHtml(selectedRange.label)}内</small></article>
+    </section>
+    <button class="mobile-finance-more" id="mobileFinanceMore" type="button" aria-expanded="${state.mobileFinanceExpanded}">${state.mobileFinanceExpanded ? '收起账本' : 'More'}</button>
+    ${mobileFinancePanelHtml()}`;
+  const financeBusiness = $('#mobileFinanceBusiness');
+  if (financeBusiness) financeBusiness.onchange = () => {
+    state.mobileFinanceBusinessId = financeBusiness.value || 'all';
+    state.mobileFinanceFilter = 'all';
+    renderMobileStats();
+  };
+  container.querySelectorAll('[data-mobile-stats-range]').forEach(button => {
+    button.onclick = () => {
+      state.mobileFinanceRange = button.dataset.mobileStatsRange || 'today';
+      void loadMobileStats();
+    };
+  });
+  const financeMore = $('#mobileFinanceMore');
+  if (financeMore) financeMore.onclick = () => {
+    state.mobileFinanceExpanded = !state.mobileFinanceExpanded;
+    renderMobileStats();
+  };
+  container.querySelectorAll('[data-finance-filter]').forEach(button => {
+    button.onclick = () => {
+      state.mobileFinanceFilter = button.dataset.financeFilter || 'all';
+      renderMobileStats();
+    };
+  });
+  const addFinanceEntry = $('#mobileFinanceAdd');
+  if (addFinanceEntry) addFinanceEntry.onclick = () => openMobileFinanceDialog();
+  const exportFinance = $('#mobileFinanceExport');
+  if (exportFinance) exportFinance.onclick = exportMobileFinanceCsv;
+  container.querySelectorAll('[data-finance-entry-id]').forEach(button => {
+    button.onclick = () => {
+      const entry = state.mobileFinanceData?.entries?.find(item => item.id === button.dataset.financeEntryId);
+      if (entry) openMobileFinanceDialog(entry);
+    };
+  });
+}
+
 async function loadMobileStats() {
   if (!isSuperAdmin()) return;
   const button = $('#refreshMobileStatsButton');
   if (button) button.disabled = true;
+  state.mobileFinanceLoading = true;
+  state.mobileFinanceError = '';
+  renderMobileStats();
   try {
-    const relayChoices = await window.caishen.getRelayChoices().catch(() => state.relayChoices);
-    state.relayChoices = relayChoices || state.relayChoices;
-    const relays = state.relayChoices?.relays || [];
-    if (!relays.some(relay => relay.id === state.mobileStatsRelayId)) {
-      state.mobileStatsRelayId = state.relayChoices?.activeRelayId || relays[0]?.id || '';
-    }
-    if (!state.mobileStatsRelayId) throw new Error('暂无可用中转站，请先在 API 设置中启用中转站');
-    const relayId = state.mobileStatsRelayId;
-    const [today, yesterday, d7, month] = await Promise.all([
-      window.caishen.getGlobalStats('today', relayId),
-      window.caishen.getGlobalStats('yesterday', relayId),
-      window.caishen.getGlobalStats('7d', relayId),
-      window.caishen.getGlobalStats('month', relayId)
-    ]);
-    state.mobileStats = { today, yesterday, d7, month };
+    state.mobileBusinessHub = await window.caishen.getBusinessHubOverview({
+      range: state.mobileFinanceRange,
+      includeRecharges: false
+    });
+    if (state.mobileFinanceBusinessId !== 'all' && !state.mobileBusinessHub.businesses?.some(
+      item => item.id === state.mobileFinanceBusinessId && item.available
+    )) state.mobileFinanceBusinessId = 'all';
+    state.mobileAccounting = mobileFinanceAccountingView();
+    state.mobileFinanceData = state.mobileAccounting.finance;
     state.mobileStatsUpdatedAt = new Date().toISOString();
-    renderMobileStats();
   } catch (error) {
-    const container = $('#mobileStatsContent');
-    if (container) container.innerHTML = `<div class="mobile-stats-loading error">${escapeHtml(errorText(error))}</div>`;
+    state.mobileFinanceError = errorText(error);
     toast(errorText(error), true);
   } finally {
+    state.mobileFinanceLoading = false;
     if (button) button.disabled = false;
+    renderMobileStats();
   }
 }
 
