@@ -4,6 +4,7 @@ const ASSET_PREVIEW_SIZE_STORAGE_KEY = 'caishen-web-asset-preview-sizes-v1';
 const REVIEW_VIEWED_STORAGE_KEY = 'caishen-web-viewed-review-jobs-v1';
 const REVIEW_REGENERATION_RECORDS_STORAGE_KEY = 'caishen-web-review-regeneration-records-v1';
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'caishen-web-sidebar-collapsed-v1';
+const ASSET_PAGE_SIZE = 100;
 let storageScope = 'anonymous';
 const scopedStorageKey = key => `${key}:${storageScope}`;
 
@@ -143,6 +144,7 @@ const state = {
   prints: [],
   productFolder: '',
   printFolder: '',
+  assetGridPages: { product: 1, print: 1 },
   selectedProduct: null,
   selectedPrint: null,
   queue: [],
@@ -195,6 +197,7 @@ const state = {
   assetPreviewCache: new Map(),
   assetPreviewLoadId: 0,
   assetPreviewSizes: { printsPath: 138, detailSetsPath: 138 },
+  assetPreviewPages: { printsPath: 1, detailSetsPath: 1 },
   assetTemplateFilter: 'all',
   selectedAssetPaths: new Set(),
   assetUploading: false,
@@ -2493,7 +2496,7 @@ function renderAssetSelectionState() {
   const visiblePaths = visibleAssetPreviewItems().map(item => item.path);
   const allVisibleSelected = visiblePaths.length > 0 && visiblePaths.every(path => state.selectedAssetPaths.has(path));
   $('#assetSelectedCount').textContent = count ? `已选择 ${count} 张` : '支持拖拽添加 · 未选择';
-  $('#selectAllAssetsButton').textContent = allVisibleSelected ? '取消全选' : '全选';
+  $('#selectAllAssetsButton').textContent = allVisibleSelected ? '取消本页' : '全选本页';
   $('#selectAllAssetsButton').disabled = visiblePaths.length === 0 || state.assetUploading;
   $('#deleteSelectedAssetsButton').disabled = count === 0 || state.assetUploading;
   $('#addAssetFilesButton').disabled = state.assetUploading || viewingAllTemplates;
@@ -2531,8 +2534,31 @@ function filteredAssetPreviewItems() {
   return state.assetPreviewItems.filter(item => normalizeTemplateUiAction(item.action) === state.assetTemplateFilter);
 }
 
+function normalizedAssetPage(value, total) {
+  const pageCount = Math.max(1, Math.ceil(Math.max(0, Number(total) || 0) / ASSET_PAGE_SIZE));
+  return Math.max(1, Math.min(pageCount, Math.trunc(Number(value) || 1)));
+}
+
+function assetPaginationHtml(scope, currentPage, total) {
+  const count = Math.max(0, Number(total) || 0);
+  const pageCount = Math.max(1, Math.ceil(count / ASSET_PAGE_SIZE));
+  const page = normalizedAssetPage(currentPage, count);
+  const first = count ? (page - 1) * ASSET_PAGE_SIZE + 1 : 0;
+  const last = Math.min(count, page * ASSET_PAGE_SIZE);
+  const options = Array.from({ length: pageCount }, (_, index) => index + 1)
+    .map(value => `<option value="${value}"${value === page ? ' selected' : ''}>第 ${value} 页</option>`).join('');
+  return `<nav class="asset-pagination" aria-label="素材分页">
+    <span>共 ${formatInteger(count)} 张${count ? ` · 当前 ${formatInteger(first)}-${formatInteger(last)}` : ''}</span>
+    <div><button class="secondary" type="button" data-asset-page-scope="${escapeHtml(scope)}" data-asset-page="${page - 1}"${page <= 1 ? ' disabled' : ''}>上一页</button><select data-asset-page-select="${escapeHtml(scope)}" aria-label="选择素材页码">${options}</select><button class="secondary" type="button" data-asset-page-scope="${escapeHtml(scope)}" data-asset-page="${page + 1}"${page >= pageCount ? ' disabled' : ''}>下一页</button></div>
+  </nav>`;
+}
+
 function visibleAssetPreviewItems() {
-  return filteredAssetPreviewItems().slice(0, 160);
+  const filtered = filteredAssetPreviewItems();
+  const page = normalizedAssetPage(state.assetPreviewPages[state.assetPreviewKey], filtered.length);
+  state.assetPreviewPages[state.assetPreviewKey] = page;
+  const start = (page - 1) * ASSET_PAGE_SIZE;
+  return filtered.slice(start, start + ASSET_PAGE_SIZE);
 }
 
 function renderAssetTemplateFilters() {
@@ -2552,13 +2578,17 @@ function renderAssetTemplateFilters() {
 function renderAssetManagementGrid() {
   const grid = $('#assetManagementGrid');
   const filtered = filteredAssetPreviewItems();
-  const visible = filtered.slice(0, 160);
+  const page = normalizedAssetPage(state.assetPreviewPages[state.assetPreviewKey], filtered.length);
+  state.assetPreviewPages[state.assetPreviewKey] = page;
+  const start = (page - 1) * ASSET_PAGE_SIZE;
+  const visible = filtered.slice(start, start + ASSET_PAGE_SIZE);
   const validPaths = new Set(state.assetPreviewItems.map(item => item.path));
   state.selectedAssetPaths = new Set([...state.selectedAssetPaths].filter(path => validPaths.has(path)));
   renderAssetTemplateFilters();
-  if (state.assetPreviewKey === 'detailSetsPath' && state.assetTemplateFilter !== 'all') {
-    $('#assetPreviewSummary').textContent = `当前显示 ${filtered.length} / ${state.assetPreviewItems.length} 张`;
-  }
+  const pageCount = Math.max(1, Math.ceil(filtered.length / ASSET_PAGE_SIZE));
+  $('#assetPreviewSummary').textContent = state.assetPreviewKey === 'detailSetsPath' && state.assetTemplateFilter !== 'all'
+    ? `筛选到 ${filtered.length} / ${state.assetPreviewItems.length} 张 · 第 ${page}/${pageCount} 页`
+    : `共 ${filtered.length} 张 · 第 ${page}/${pageCount} 页`;
   grid.innerHTML = visible.length
     ? visible.map(item => {
       const selected = state.selectedAssetPaths.has(item.path);
@@ -2570,7 +2600,7 @@ function renderAssetManagementGrid() {
         <button class="asset-card-select" type="button" data-asset-select aria-pressed="${selected}"><span class="asset-select-mark">${selected ? '✓' : ''}</span><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span class="asset-card-caption"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(template && currentTemplateFolderView() === 'all' ? `${item.templateFolderName || '套图'} · ${item.folder}` : item.folder)}</small></span></button>
         ${template ? `<div class="asset-analysis-actions"><button class="secondary" type="button" data-template-result="${escapeHtml(item.path)}">框选区域</button></div><small class="asset-analysis-status manual">${escapeHtml(statusText)}</small>` : ''}
       </article>`;
-    }).join('')
+    }).join('') + assetPaginationHtml(`management:${state.assetPreviewKey}`, page, filtered.length)
     : state.assetPreviewItems.length && state.assetPreviewKey === 'detailSetsPath'
       ? '<div class="empty-inline asset-empty-drop"><b>当前筛选没有图片</b><span>切换其他动作或选择“全部”。</span></div>'
       : '<div class="empty-inline asset-empty-drop"><b>拖入图片即可添加</b><span>也可以点击右上角“添加文件”。</span></div>';
@@ -2682,6 +2712,7 @@ async function loadAssetLibraryPreview(key = 'printsPath', { preserveSelection =
   const previousKey = state.assetPreviewKey;
   const shouldResetScroll = key !== previousKey || force || !preserveSelection;
   if (key !== previousKey || !preserveSelection) state.selectedAssetPaths.clear();
+  if (shouldResetScroll) state.assetPreviewPages[key] = 1;
   state.assetPreviewKey = key;
   const loadId = ++state.assetPreviewLoadId;
   const labels = { printsPath: '印花素材', detailSetsPath: '套图模板' };
@@ -2710,16 +2741,9 @@ async function loadAssetLibraryPreview(key = 'printsPath', { preserveSelection =
   }
   const cached = state.assetPreviewCache.get(key);
   if (!force && cached?.root === root) {
-    const alreadyRendered = previousKey === key
-      && state.assetPreviewItems === cached.items
-      && grid.childElementCount > 0
-      && !grid.querySelector('.empty-inline');
     state.assetPreviewItems = cached.items;
     if (key === 'detailSetsPath') state.templateItems = cached.items;
-    const visible = cached.items.slice(0, 160);
-    $('#assetPreviewSummary').textContent = `${key === 'detailSetsPath' && templateView === 'all' ? `${state.templateFolders.length} 个文件夹 · ` : ''}共 ${cached.items.length} 张${cached.items.length > visible.length ? `，当前显示前 ${visible.length} 张` : ''}`;
-    if (alreadyRendered) renderAssetSelectionState();
-    else renderAssetManagementGrid();
+    renderAssetManagementGrid();
     return;
   }
   grid.innerHTML = '<div class="empty-inline">正在读取素材…</div>';
@@ -2732,8 +2756,6 @@ async function loadAssetLibraryPreview(key = 'printsPath', { preserveSelection =
     state.assetPreviewItems = items;
     if (key === 'detailSetsPath') state.templateItems = items;
     if (currentPage !== 'assets') return;
-    const visible = items.slice(0, 160);
-    $('#assetPreviewSummary').textContent = `${key === 'detailSetsPath' && templateView === 'all' ? `${state.templateFolders.length} 个文件夹 · ` : ''}共 ${items.length} 张${items.length > visible.length ? `，当前显示前 ${visible.length} 张` : ''}`;
     renderAssetManagementGrid();
   } catch (error) {
     if (loadId !== state.assetPreviewLoadId || state.assetPreviewKey !== key || currentPage !== 'assets') return;
@@ -2745,6 +2767,7 @@ async function loadAssetLibraryPreview(key = 'printsPath', { preserveSelection =
 
 async function loadAssets(key, query = '') {
   const isProduct = key === 'categoriesPath';
+  state.assetGridPages[isProduct ? 'product' : 'print'] = 1;
   const grid = $(isProduct ? '#productGrid' : '#printGrid');
   grid.innerHTML = '<div class="empty-inline">正在扫描素材…</div>';
   try {
@@ -2859,7 +2882,11 @@ function renderAssets(type) {
   const allItems = isProduct ? state.products : state.prints;
   const selectedFolder = isProduct ? state.productFolder : state.printFolder;
   const matchingItems = selectedFolder ? allItems.filter(item => item.folder === selectedFolder || item.folder.startsWith(`${selectedFolder}/`)) : allItems;
-  const items = sortByName(matchingItems, isProduct ? 'name-asc' : state.printSort, item => item.name).slice(0, 240);
+  const sortedItems = sortByName(matchingItems, isProduct ? 'name-asc' : state.printSort, item => item.name);
+  const page = normalizedAssetPage(state.assetGridPages[type], sortedItems.length);
+  state.assetGridPages[type] = page;
+  const start = (page - 1) * ASSET_PAGE_SIZE;
+  const items = sortedItems.slice(start, start + ASSET_PAGE_SIZE);
   const selected = isProduct ? state.selectedProduct : state.selectedPrint;
   const grid = $(isProduct ? '#productGrid' : '#printGrid');
   renderAssetFolders(type, allItems);
@@ -2868,7 +2895,7 @@ function renderAssets(type) {
     return;
   }
   grid.innerHTML = items.map(item => `<button class="asset-card${selected?.path === item.path ? ' selected' : ''}" data-type="${type}" data-index="${allItems.indexOf(item)}" title="${escapeHtml(item.path)}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span>${escapeHtml(item.name)}</span></button>`).join('')
-    + (matchingItems.length > items.length ? `<div class="empty-inline">当前显示前 ${items.length} 张，请使用搜索或左侧文件夹缩小范围。</div>` : '');
+    + assetPaginationHtml(type, page, sortedItems.length);
 }
 
 function renderSelection() {
@@ -5444,6 +5471,7 @@ function bindEvents() {
     if (!button) return;
     if (state.assetTemplateFilter === button.dataset.assetTemplateFilter) return;
     state.assetTemplateFilter = button.dataset.assetTemplateFilter;
+    state.assetPreviewPages[state.assetPreviewKey] = 1;
     renderAssetManagementGrid();
     resetAssetManagementScroll();
   };
@@ -5451,6 +5479,12 @@ function bindEvents() {
   $('#addAssetFilesButton').onclick = chooseAndAddAssetFiles;
   $('#deleteSelectedAssetsButton').onclick = deleteSelectedAssets;
   $('#assetManagementGrid').onclick = event => {
+    const pageButton = event.target.closest('[data-asset-page-scope]');
+    if (pageButton?.dataset.assetPageScope === `management:${state.assetPreviewKey}`) {
+      state.assetPreviewPages[state.assetPreviewKey] = Number(pageButton.dataset.assetPage) || 1;
+      renderAssetManagementGrid();
+      return resetAssetManagementScroll();
+    }
     const resultButton = event.target.closest('[data-template-result]');
     if (resultButton) return openTemplateRegionEditor(resultButton.dataset.templateResult);
     const selectButton = event.target.closest('[data-asset-select]');
@@ -5460,6 +5494,13 @@ function bindEvents() {
     if (state.selectedAssetPaths.has(assetPath)) state.selectedAssetPaths.delete(assetPath);
     else state.selectedAssetPaths.add(assetPath);
     renderAssetManagementGrid();
+  };
+  $('#assetManagementGrid').onchange = event => {
+    const pageSelect = event.target.closest('[data-asset-page-select]');
+    if (pageSelect?.dataset.assetPageSelect !== `management:${state.assetPreviewKey}`) return;
+    state.assetPreviewPages[state.assetPreviewKey] = Number(pageSelect.value) || 1;
+    renderAssetManagementGrid();
+    resetAssetManagementScroll();
   };
   $('#assetManagementGrid').ondragenter = event => {
     if (![...(event.dataTransfer?.types || [])].includes('Files')) return;
@@ -5776,11 +5817,23 @@ function bindEvents() {
     }
   };
   $('#productGrid').onclick = event => {
+    const pageButton = event.target.closest('[data-asset-page-scope="product"]');
+    if (pageButton) {
+      state.assetGridPages.product = Number(pageButton.dataset.assetPage) || 1;
+      renderAssets('product');
+      return requestAnimationFrame(() => { $('#productGrid').scrollTop = 0; });
+    }
     const card = event.target.closest('[data-type="product"]');
     if (!card) return;
     state.selectedProduct = state.products[Number(card.dataset.index)]; renderAssets('product'); renderSelection();
   };
   $('#printGrid').onclick = event => {
+    const pageButton = event.target.closest('[data-asset-page-scope="print"]');
+    if (pageButton) {
+      state.assetGridPages.print = Number(pageButton.dataset.assetPage) || 1;
+      renderAssets('print');
+      return requestAnimationFrame(() => { $('#printGrid').scrollTop = 0; });
+    }
     const card = event.target.closest('[data-type="print"]');
     if (!card) return;
     state.selectedPrint = state.prints[Number(card.dataset.index)]; renderAssets('print'); renderSelection();
@@ -5789,16 +5842,32 @@ function bindEvents() {
       renderTemplateWorkflow();
     }
   };
+  $('#productGrid').onchange = event => {
+    const pageSelect = event.target.closest('[data-asset-page-select="product"]');
+    if (!pageSelect) return;
+    state.assetGridPages.product = Number(pageSelect.value) || 1;
+    renderAssets('product');
+    requestAnimationFrame(() => { $('#productGrid').scrollTop = 0; });
+  };
+  $('#printGrid').onchange = event => {
+    const pageSelect = event.target.closest('[data-asset-page-select="print"]');
+    if (!pageSelect) return;
+    state.assetGridPages.print = Number(pageSelect.value) || 1;
+    renderAssets('print');
+    requestAnimationFrame(() => { $('#printGrid').scrollTop = 0; });
+  };
   $('#productFolderList').onclick = event => {
     const button = event.target.closest('[data-asset-folder]');
     if (!button) return;
     state.productFolder = button.dataset.assetFolder;
+    state.assetGridPages.product = 1;
     renderAssets('product');
   };
   $('#printFolderList').onclick = event => {
     const button = event.target.closest('[data-asset-folder]');
     if (!button) return;
     state.printFolder = button.dataset.assetFolder;
+    state.assetGridPages.print = 1;
     renderAssets('print');
   };
   $('#taskTemplateSort').onchange = async event => {
@@ -5812,6 +5881,7 @@ function bindEvents() {
   };
   $('#printSort').onchange = event => {
     state.printSort = event.target.value === 'name-desc' ? 'name-desc' : 'name-asc';
+    state.assetGridPages.print = 1;
     renderAssets('print');
   };
   if ($('#productPreviewSize')) $('#productPreviewSize').oninput = event => { $('#productGrid').style.setProperty('--asset-card-size', `${event.target.value}px`); };

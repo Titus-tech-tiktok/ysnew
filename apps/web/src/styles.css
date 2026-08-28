@@ -6032,6 +6032,11 @@ label input, label textarea {
   }
 }
 .asset-management-grid { position: relative; }
+.asset-pagination { grid-column: 1 / -1; width: 100%; min-height: 48px; margin-top: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, .96); display: flex; align-items: center; justify-content: space-between; gap: 10px; box-shadow: 0 6px 18px rgba(24, 31, 42, .06); }
+.asset-pagination > span { color: var(--subtle); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.asset-pagination > div { display: flex; align-items: center; gap: 6px; }
+.asset-pagination button { min-height: 34px; padding: 6px 10px; font-size: 11px; }
+.asset-pagination select { min-height: 34px; max-width: 118px; padding: 5px 28px 5px 9px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: 11px; font-weight: 700; }
 .asset-management-grid.drag-active::after { content: "松开鼠标，将图片添加到当前素材库"; position: absolute; z-index: 8; inset: 10px; display: grid; place-items: center; border: 2px dashed var(--teal); border-radius: 10px; background: rgba(220, 233, 229, .94); color: var(--teal); font-size: 15px; font-weight: 750; pointer-events: none; }
 .asset-management-card { position: relative; padding: 0; color: var(--ink); text-align: left; cursor: pointer; transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease; }
 .asset-management-card:hover { border-color: #9caaa5; transform: translateY(-1px); box-shadow: 0 8px 18px rgba(24, 31, 42, .08); }
@@ -6124,6 +6129,9 @@ label input, label textarea {
   .template-library-source { grid-template-columns: 1fr; }
   .template-library-source .asset-source-actions, .template-folder-browser { grid-column: 1; width: 100%; }
   .template-folder-card { flex-basis: 190px; }
+  .asset-pagination { align-items: stretch; flex-direction: column; }
+  .asset-pagination > div { display: grid; grid-template-columns: 1fr minmax(92px, auto) 1fr; }
+  .asset-pagination button, .asset-pagination select { width: 100%; min-height: 40px; }
 }
 
 /* Per-task queue actions */
