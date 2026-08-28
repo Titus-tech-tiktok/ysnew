@@ -12,7 +12,7 @@ test('mobile ledger displays USD balance and consumption with two decimals', asy
   assert.match(renderer, /formatMobileStatsMoney\(ledgerTotals\.consumptionUsdMinor\)/);
 });
 
-test('mobile ledger uses one business selector and four day ranges', async () => {
+test('mobile ledger uses one business selector and supports current and historical ranges', async () => {
   const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
   const renderBlock = renderer.match(/function renderMobileStats\(\)[\s\S]*?\n\}/)?.[0] || '';
   const loadBlock = renderer.match(/async function loadMobileStats\(\)[\s\S]*?\n\}/)?.[0] || '';
@@ -22,8 +22,12 @@ test('mobile ledger uses one business selector and four day ranges', async () =>
   assert.match(renderBlock, /\{ key: 'yesterday', label: '昨天' \}/);
   assert.match(renderBlock, /\{ key: '7d', label: '近 7 天' \}/);
   assert.match(renderBlock, /\{ key: 'month', label: '本月' \}/);
+  assert.match(renderBlock, /\{ key: 'last_month', label: '上月' \}/);
+  assert.match(renderBlock, /\{ key: 'year', label: '本年' \}/);
+  assert.match(renderBlock, /\{ key: 'last_year', label: '上年' \}/);
   assert.doesNotMatch(renderBlock, /Account Ranking|费用流水|Average Cost|First-pass success/);
   assert.match(loadBlock, /getBusinessHubOverview/);
+  assert.match(loadBlock, /mobileFinanceRangeRequest/);
   assert.match(loadBlock, /includeRecharges: false/);
   assert.doesNotMatch(loadBlock, /getGlobalStats/);
 });

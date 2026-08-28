@@ -1486,7 +1486,11 @@ async function startServer() {
     if (DUOXI_BUSINESS_URL) {
       try {
         const remote = await requestBusiness(DUOXI_BUSINESS_URL, '/api/internal/business/snapshot', query);
-        businesses.push({ ...remote, available: true });
+        businesses.push({
+          ...remote,
+          accounting: await businessSnapshot.attachFinance(remote.accounting || {}, 'duoxiluka'),
+          available: true
+        });
       } catch (error) {
         businesses.push({ id: 'duoxiluka', name: '多嘻噜卡科技', available: false, error: error?.message || String(error) });
       }
@@ -1506,6 +1510,12 @@ async function startServer() {
           netProfitCnyMinor: sum('netProfitCnyMinor'),
           upstreamCostCnyMinor: sum('upstreamCostCnyMinor'),
           operatingExpensesCnyMinor: sum('operatingExpensesCnyMinor'),
+          customerReceiptsCnyMinor: sum('customerReceiptsCnyMinor'),
+          recognizedRevenueCnyMinor: sum('recognizedRevenueCnyMinor'),
+          upstreamActualCostCnyMinor: sum('upstreamActualCostCnyMinor'),
+          upstreamTopupsCnyMinor: sum('upstreamTopupsCnyMinor'),
+          operatingProfitCnyMinor: sum('operatingProfitCnyMinor'),
+          netCashFlowCnyMinor: sum('netCashFlowCnyMinor'),
           successfulImages: sum('successfulImages'),
           upstreamRequestCount: available.reduce((total, item) => total + (Number(item.upstreamRequests?.count) || 0), 0)
         },
@@ -1556,20 +1566,19 @@ async function startServer() {
   });
 
   app.post('/api/business-hub/finance-entry-action', async (req, res) => {
-    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权修改经营收入' });
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权修改经营账目' });
     try {
       const businessId = String(req.body?.businessId || '');
+      if (!['yongsha', 'duoxiluka'].includes(businessId)) {
+        return res.status(400).json({ error: '业务账户不可用' });
+      }
       const payload = {
         action: String(req.body?.action || ''),
         id: String(req.body?.id || ''),
-        entry: req.body?.entry || {}
+        businessId,
+        entry: { ...(req.body?.entry || {}), businessId }
       };
-      const data = businessId === 'yongsha'
-        ? await businessSnapshot.financeEntryAction(payload)
-        : businessId === 'duoxiluka' && DUOXI_BUSINESS_URL
-          ? await requestBusiness(DUOXI_BUSINESS_URL, '/api/internal/business/finance-entry-action', payload)
-          : null;
-      if (!data) return res.status(400).json({ error: '业务账户不可用' });
+      const data = await businessSnapshot.financeEntryAction(payload);
       return res.json({ data: { ...data, businessId } });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });

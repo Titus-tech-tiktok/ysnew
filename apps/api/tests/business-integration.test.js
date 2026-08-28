@@ -70,7 +70,11 @@ test('业务快照汇总上游请求和经营账目', async () => {
       financeLedger: {
         listRange: async () => ({
           entries: [],
-          summary: { otherIncomeCnyMinor: 500, operatingExpensesCnyMinor: 300 }
+          summary: {
+            customerReceiptsCnyMinor: 100_000,
+            operatingExpensesCnyMinor: 300,
+            gatewayTopupsCnyMinor: 23_000
+          }
         })
       }
     },
@@ -81,13 +85,15 @@ test('业务快照汇总上游请求和经营账目', async () => {
   const snapshot = await service.snapshot({ range: 'month' });
   assert.equal(snapshot.id, 'demo');
   assert.equal(snapshot.upstreamRequests.count, 10);
-  assert.equal(snapshot.accounting.totals.businessRevenueCnyMinor, 500);
+  assert.equal(snapshot.accounting.totals.customerReceiptsCnyMinor, 100_000);
+  assert.equal(snapshot.accounting.totals.businessRevenueCnyMinor, 2300);
   assert.equal(snapshot.accounting.totals.totalExpensesCnyMinor, 2300);
-  assert.equal(snapshot.accounting.totals.netProfitCnyMinor, -1800);
+  assert.equal(snapshot.accounting.totals.operatingProfitCnyMinor, 0);
+  assert.equal(snapshot.accounting.totals.netCashFlowCnyMinor, 76_700);
   assert.equal(snapshot.recharges[0].businessName, '示例业务');
 });
 
-test('业务收入操作只写入手工收入分类', async () => {
+test('统一经营账本仅允许三种手工账目并写入业务编号', async () => {
   const calls = [];
   const service = createBusinessSnapshotService({
     auth: {},
@@ -100,10 +106,15 @@ test('业务收入操作只写入手工收入分类', async () => {
     },
     alipayRecharge: {}
   });
-  await service.financeEntryAction({ action: 'create', entry: { category: 'server', amount: '100' } });
-  await service.financeEntryAction({ action: 'update', id: 'fin-1', entry: { category: 'refund', amount: '80' } });
+  await service.financeEntryAction({ action: 'create', businessId: 'duoxiluka', entry: { category: 'client_payment', amount: '100' } });
+  await service.financeEntryAction({ action: 'update', id: 'fin-1', businessId: 'duoxiluka', entry: { category: 'gateway_topup', amount: '80' } });
   await service.financeEntryAction({ action: 'delete', id: 'fin-1' });
-  assert.equal(calls[0][1].category, 'other_income');
-  assert.equal(calls[1][2].category, 'other_income');
+  assert.equal(calls[0][1].category, 'client_payment');
+  assert.equal(calls[0][1].businessId, 'duoxiluka');
+  assert.equal(calls[1][2].category, 'gateway_topup');
   assert.deepEqual(calls[2], ['delete', 'fin-1']);
+  await assert.rejects(
+    () => service.financeEntryAction({ action: 'create', entry: { category: 'server', amount: '1' } }),
+    /类型无效/
+  );
 });

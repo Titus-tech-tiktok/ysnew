@@ -3,8 +3,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const FINANCE_CATEGORIES = Object.freeze({
-  client_payment: { direction: 'income', label: '客户充值（旧手工记录）' },
-  other_income: { direction: 'income', label: '其他收入' },
+  client_payment: { direction: 'income', label: '客户到账' },
+  other_income: { direction: 'income', label: '客户到账（旧记录）' },
   gateway_topup: { direction: 'transfer', label: '上游充值' },
   development: { direction: 'expense', label: '开发费用' },
   advertising: { direction: 'expense', label: '推广费用' },
@@ -79,6 +79,12 @@ function createFinanceLedgerService(dataRoot) {
     return minor;
   }
 
+  function normalizeBusinessId(value) {
+    const businessId = String(value || 'yongsha').trim().toLowerCase();
+    if (!/^[a-z0-9_-]{1,80}$/.test(businessId)) throw new Error('业务编号无效');
+    return businessId;
+  }
+
   function normalizeEntry(input = {}, existing = {}) {
     const category = String(input.category ?? existing.category ?? '').trim();
     const categoryDefinition = FINANCE_CATEGORIES[category];
@@ -97,6 +103,7 @@ function createFinanceLedgerService(dataRoot) {
     if (!Number.isSafeInteger(amountCnyMinor) || amountCnyMinor <= 0) throw new Error('人民币换算金额超出有效范围');
     const relayId = String(input.relayId ?? existing.relayId ?? '').trim().toLowerCase();
     if (relayId && !/^[a-z0-9_-]{1,80}$/.test(relayId)) throw new Error('中转站编号无效');
+    const businessId = normalizeBusinessId(input.businessId ?? existing.businessId);
     const now = new Date().toISOString();
     return {
       id: existing.id || `fin_${crypto.randomUUID()}`,
@@ -109,6 +116,7 @@ function createFinanceLedgerService(dataRoot) {
       originalAmountMinor,
       exchangeRate: Number(exchangeRate.toFixed(6)),
       amountCnyMinor,
+      businessId,
       relayId,
       note: String(input.note ?? existing.note ?? '').trim().slice(0, 500),
       createdAt: existing.createdAt || now,
@@ -164,9 +172,11 @@ function createFinanceLedgerService(dataRoot) {
     if (endDate < startDate) throw new Error('账目结束日期不能早于开始日期');
     const relayId = String(options.relayId || '').trim().toLowerCase();
     if (relayId && !/^[a-z0-9_-]{1,80}$/.test(relayId)) throw new Error('中转站编号无效');
+    const businessId = options.businessId ? normalizeBusinessId(options.businessId) : '';
     const state = await readLedger();
     const inScope = entry => String(entry.date || '') >= startDate
       && String(entry.date || '') <= endDate
+      && (!businessId || normalizeBusinessId(entry.businessId) === businessId)
       && (!relayId || entry.relayId === relayId);
     const entries = state.entries.filter(inScope).sort((left, right) => String(right.date || '').localeCompare(String(left.date || ''))
       || String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
@@ -177,12 +187,14 @@ function createFinanceLedgerService(dataRoot) {
     return {
       startDate,
       endDate,
+      businessId,
       relayId,
       entries,
       summary: {
         revenueCnyMinor: sum(entries, entry => entry.direction === 'income'),
         otherIncomeCnyMinor: sum(entries, entry => entry.category === 'other_income'),
         legacyClientPaymentsCnyMinor: sum(entries, entry => entry.category === 'client_payment'),
+        customerReceiptsCnyMinor: sum(entries, entry => ['client_payment', 'other_income'].includes(entry.category)),
         operatingExpensesCnyMinor: sum(entries, entry => entry.direction === 'expense'),
         gatewayTopupsCnyMinor: sum(entries, entry => entry.category === 'gateway_topup'),
         cashFlowCnyMinor: sum(entries, entry => entry.direction === 'income')

@@ -488,7 +488,28 @@ function financeCategoryLabel(category) {
 }
 
 function mobileFinanceRangeLabel(range = state.mobileFinanceRange) {
-  return ({ today: '今天', yesterday: '昨天', '7d': '近 7 天', month: '本月' })[range] || '今天';
+  return ({
+    today: '今天',
+    yesterday: '昨天',
+    '7d': '近 7 天',
+    month: '本月',
+    last_month: '上月',
+    year: '本年',
+    last_year: '上年'
+  })[range] || '今天';
+}
+
+function mobileFinanceRangeRequest(range = state.mobileFinanceRange) {
+  const selected = String(range || 'today');
+  const today = currentChinaDate();
+  const year = Number(today.slice(0, 4));
+  if (selected === 'year') {
+    return { range: 'custom', startDate: `${year}-01-01`, endDate: today };
+  }
+  if (selected === 'last_year') {
+    return { range: 'custom', startDate: `${year - 1}-01-01`, endDate: `${year - 1}-12-31` };
+  }
+  return { range: selected };
 }
 
 function mobileBusinessDisplayName(id, fallback = '') {
@@ -496,8 +517,13 @@ function mobileBusinessDisplayName(id, fallback = '') {
 }
 
 function mobileFinanceLedgerTotals(accounting = {}) {
-  const manualIncomeCnyMinor = Number(accounting.finance?.summary?.otherIncomeCnyMinor) || 0;
-  const actualConsumptionCnyMinor = Number(accounting.totals?.confirmedRevenueCnyMinor) || 0;
+  const customerReceiptsCnyMinor = Number(accounting.finance?.summary?.customerReceiptsCnyMinor)
+    || (Number(accounting.finance?.summary?.otherIncomeCnyMinor) || 0)
+      + (Number(accounting.finance?.summary?.legacyClientPaymentsCnyMinor) || 0);
+  const recognizedRevenueCnyMinor = Number(accounting.totals?.confirmedRevenueCnyMinor) || 0;
+  const upstreamActualCostCnyMinor = Number(accounting.totals?.upstreamCostCnyMinor) || 0;
+  const upstreamTopupsCnyMinor = Number(accounting.finance?.summary?.gatewayTopupsCnyMinor) || 0;
+  const otherExpensesCnyMinor = Number(accounting.finance?.summary?.operatingExpensesCnyMinor) || 0;
   const balanceUsdMinor = (accounting.relays || []).reduce(
     (sum, relay) => sum + (Number(relay.customerBalanceUsdMinor) || 0), 0
   );
@@ -505,9 +531,13 @@ function mobileFinanceLedgerTotals(accounting = {}) {
     (sum, relay) => sum + (Number(relay.confirmedSpendUsdMinor) || 0), 0
   );
   return {
-    manualIncomeCnyMinor,
-    actualConsumptionCnyMinor,
-    netProfitCnyMinor: manualIncomeCnyMinor - actualConsumptionCnyMinor,
+    customerReceiptsCnyMinor,
+    recognizedRevenueCnyMinor,
+    upstreamActualCostCnyMinor,
+    upstreamTopupsCnyMinor,
+    otherExpensesCnyMinor,
+    operatingProfitCnyMinor: recognizedRevenueCnyMinor - upstreamActualCostCnyMinor - otherExpensesCnyMinor,
+    netCashFlowCnyMinor: customerReceiptsCnyMinor - upstreamTopupsCnyMinor - otherExpensesCnyMinor,
     balanceUsdMinor,
     consumptionUsdMinor
   };
@@ -518,25 +548,40 @@ function mobileFinanceBusinessEntries(accounting = state.mobileAccounting || {})
   for (const point of accounting.daily || []) {
     if (Number(point.revenueCnyMinor) > 0) {
       rows.push({
-        id: `consumption-${point.relayId}-${point.date}`,
+        id: `revenue-${point.relayId}-${point.date}`,
+        automatic: true,
+        direction: 'income',
+        date: point.date,
+        relayId: point.relayId,
+        relayName: point.relayName,
+        title: '已消费收入',
+        detail: `${formatInteger(point.successfulImages)} 张 · 系统自动统计`,
+        amountCnyMinor: Number(point.revenueCnyMinor) || 0
+      });
+    }
+    if (Number(point.upstreamCostCnyMinor) > 0) {
+      rows.push({
+        id: `upstream-cost-${point.relayId}-${point.date}`,
         automatic: true,
         direction: 'expense',
         date: point.date,
         relayId: point.relayId,
         relayName: point.relayName,
-        title: 'API 实际消耗',
+        title: '上游实际成本',
         detail: `${formatInteger(point.successfulImages)} 张 · 系统自动统计`,
-        amountCnyMinor: Number(point.revenueCnyMinor) || 0
+        amountCnyMinor: Number(point.upstreamCostCnyMinor) || 0
       });
     }
   }
   for (const entry of accounting.finance?.entries || []) {
-    if (entry.category !== 'other_income') continue;
+    if (!['client_payment', 'other_income', 'gateway_topup', 'other_expense'].includes(entry.category)) continue;
+    const direction = entry.category === 'gateway_topup' ? 'expense' : entry.direction;
     rows.push({
       ...entry,
+      direction,
       automatic: false,
       relayName: entry.relayId || '公共账目',
-      title: entry.counterparty || financeCategoryLabel(entry.category),
+      title: entry.counterparty || ({ client_payment: '客户到账', other_income: '客户到账', gateway_topup: '上游充值', other_expense: '其他费用' })[entry.category],
       detail: `${financeCategoryLabel(entry.category)}${entry.note ? ` · ${entry.note}` : ''}`
     });
   }
@@ -556,14 +601,16 @@ function mobileFinanceAccountingView() {
     'customerRechargeCnyMinor', 'customerBalanceCnyMinor', 'customerTopupCnyMinor',
     'confirmedRevenueCnyMinor', 'upstreamCostCnyMinor', 'grossProfitCnyMinor',
     'successfulImages', 'otherIncomeCnyMinor', 'businessRevenueCnyMinor',
-    'operatingExpensesCnyMinor', 'totalExpensesCnyMinor', 'netProfitCnyMinor'
+    'operatingExpensesCnyMinor', 'totalExpensesCnyMinor', 'netProfitCnyMinor',
+    'customerReceiptsCnyMinor', 'recognizedRevenueCnyMinor', 'upstreamActualCostCnyMinor',
+    'otherExpensesCnyMinor', 'upstreamTopupsCnyMinor', 'operatingProfitCnyMinor', 'netCashFlowCnyMinor'
   ];
   const totals = Object.fromEntries(numericTotalKeys.map(key => [key, available.reduce(
     (sum, item) => sum + (Number(item.accounting?.totals?.[key]) || 0), 0
   )]));
   const financeSummaryKeys = [
     'revenueCnyMinor', 'otherIncomeCnyMinor', 'legacyClientPaymentsCnyMinor',
-    'operatingExpensesCnyMinor', 'gatewayTopupsCnyMinor', 'cashFlowCnyMinor'
+    'customerReceiptsCnyMinor', 'operatingExpensesCnyMinor', 'gatewayTopupsCnyMinor', 'cashFlowCnyMinor'
   ];
   const financeSummary = Object.fromEntries(financeSummaryKeys.map(key => [key, available.reduce(
     (sum, item) => sum + (Number(item.accounting?.finance?.summary?.[key]) || 0), 0
@@ -610,7 +657,7 @@ function mobileFinancePanelHtml() {
   const accounting = mobileFinanceAccountingView();
   const ledgerTotals = mobileFinanceLedgerTotals(accounting);
   const financeEditable = ['yongsha', 'duoxiluka'].includes(state.mobileFinanceBusinessId);
-  const canAddIncome = (state.mobileBusinessHub?.businesses || []).some(
+  const canAddEntry = (state.mobileBusinessHub?.businesses || []).some(
     item => item.available && ['yongsha', 'duoxiluka'].includes(item.id)
   );
   const relayNameById = new Map((accounting.relays || []).map(item => [item.relayId, item.relayName]));
@@ -625,16 +672,21 @@ function mobileFinancePanelHtml() {
   return `
     <section class="mobile-finance-panel">
       <div class="mobile-finance-kpis simple mobile-finance-summary-kpis">
-        <article><span>手工收入</span><strong>${formatFinanceCny(ledgerTotals.manualIncomeCnyMinor)}</strong><small>仅统计你登记的收入</small></article>
-        <article class="profit"><span>预估利润</span><strong>${formatFinanceCny(ledgerTotals.netProfitCnyMinor)}</strong><small>手工收入 − 实际消耗</small></article>
+        <article><span>客户到账</span><strong>${formatFinanceCny(ledgerTotals.customerReceiptsCnyMinor)}</strong><small>手工登记的实际收款</small></article>
+        <article><span>已消费收入</span><strong>${formatFinanceCny(ledgerTotals.recognizedRevenueCnyMinor)}</strong><small>客户已实际使用的额度</small></article>
+        <article><span>上游实际成本</span><strong>${formatFinanceCny(ledgerTotals.upstreamActualCostCnyMinor)}</strong><small>按成功生图自动核算</small></article>
+        <article><span>其他费用</span><strong>${formatFinanceCny(ledgerTotals.otherExpensesCnyMinor)}</strong><small>手工登记的经营费用</small></article>
+        <article class="profit"><span>经营利润</span><strong>${formatFinanceCny(ledgerTotals.operatingProfitCnyMinor)}</strong><small>已消费收入 − 上游成本 − 其他费用</small></article>
+        <article><span>上游充值</span><strong>${formatFinanceCny(ledgerTotals.upstreamTopupsCnyMinor)}</strong><small>实际支付给上游的现金</small></article>
+        <article class="profit"><span>净现金流</span><strong>${formatFinanceCny(ledgerTotals.netCashFlowCnyMinor)}</strong><small>客户到账 − 上游充值 − 其他费用</small></article>
       </div>
       <div class="mobile-finance-toolbar">
         <div><button type="button" data-finance-filter="all" class="${state.mobileFinanceFilter === 'all' ? 'active' : ''}">全部</button><button type="button" data-finance-filter="income" class="${state.mobileFinanceFilter === 'income' ? 'active' : ''}">收入</button><button type="button" data-finance-filter="expense" class="${state.mobileFinanceFilter === 'expense' ? 'active' : ''}">支出</button></div>
-        ${canAddIncome ? '<button type="button" id="mobileFinanceAdd">记收入</button>' : '<span class="mobile-finance-select-hint">暂无可登记收入的业务</span>'}
+        ${canAddEntry ? '<button type="button" id="mobileFinanceAdd">记一笔</button>' : '<span class="mobile-finance-select-hint">暂无可记账的业务</span>'}
       </div>
       <div class="mobile-finance-list-head"><h3>账本明细</h3><button type="button" id="mobileFinanceExport">导出 CSV</button></div>
       <div class="mobile-finance-list">${entryHtml}</div>
-      <p class="mobile-finance-cost-note">支出由系统按照实际 API 消耗自动记录，收入只采用手工登记。</p>
+      <p class="mobile-finance-cost-note">已消费收入和上游实际成本由系统自动核算；客户到账、上游充值和其他费用采用手工登记。</p>
     </section>`;
 }
 
@@ -645,10 +697,9 @@ async function loadMobileFinanceLedger() {
   state.mobileFinanceError = '';
   renderMobileStats();
   try {
+    const rangeRequest = mobileFinanceRangeRequest();
     state.mobileBusinessHub = await window.caishen.getBusinessHubOverview({
-      range: state.mobileFinanceRange,
-      startDate: state.mobileFinanceStartDate,
-      endDate: state.mobileFinanceEndDate,
+      ...rangeRequest,
       includeRecharges: false
     });
     if (state.mobileFinanceBusinessId !== 'all' && !state.mobileBusinessHub.businesses?.some(item => item.id === state.mobileFinanceBusinessId && item.available)) {
@@ -691,23 +742,25 @@ function openMobileFinanceDialog(entry = null) {
   const availableBusinesses = (state.mobileBusinessHub?.businesses || []).filter(
     item => item.available && ['yongsha', 'duoxiluka'].includes(item.id)
   );
-  if (!availableBusinesses.length) return toast('暂无可登记收入的业务', true);
+  if (!availableBusinesses.length) return toast('暂无可记账的业务', true);
   const fixedBusinessId = entry?.businessId
     || (['yongsha', 'duoxiluka'].includes(state.mobileFinanceBusinessId) ? state.mobileFinanceBusinessId : '');
   const initialBusinessId = fixedBusinessId || availableBusinesses[0].id;
-  const businessName = editing ? mobileBusinessDisplayName(initialBusinessId) : '业务收入';
+  const selectedCategory = entry?.category === 'other_income' ? 'client_payment' : (entry?.category || 'client_payment');
+  const businessName = editing ? mobileBusinessDisplayName(initialBusinessId) : '经营账本';
   const businessField = editing
     ? `<label><span>计入业务</span><input value="${escapeHtml(mobileBusinessDisplayName(initialBusinessId))}" disabled></label>`
     : `<label><span>计入业务</span><select data-finance-business>${availableBusinesses.map(item => `<option value="${escapeHtml(item.id)}"${item.id === initialBusinessId ? ' selected' : ''}>${escapeHtml(mobileBusinessDisplayName(item.id, item.name))}</option>`).join('')}</select></label>`;
   const element = document.createElement('div');
   element.className = 'mobile-finance-modal-backdrop';
   element.innerHTML = `<section class="mobile-finance-modal" role="dialog" aria-modal="true" aria-labelledby="mobileFinanceDialogTitle">
-    <header><div><span>${escapeHtml(businessName)}</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑收入' : '登记收入'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
+    <header><div><span>${escapeHtml(businessName)}</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑账目' : '登记账目'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
     <div class="mobile-finance-form">
       ${businessField}
+      <label><span>账目类型</span><select data-finance-category><option value="client_payment"${selectedCategory === 'client_payment' ? ' selected' : ''}>客户到账</option><option value="gateway_topup"${selectedCategory === 'gateway_topup' ? ' selected' : ''}>上游充值</option><option value="other_expense"${selectedCategory === 'other_expense' ? ' selected' : ''}>其他费用</option></select></label>
       <label><span>日期</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
-      <label><span>收入金额（CNY）</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.amountCnyMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
-      <label class="wide"><span>收入来源</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="例如：客户服务收入"></label>
+      <label><span>金额（CNY）</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.amountCnyMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
+      <label class="wide"><span>对方或用途</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="例如：客户名称、上游名称或费用用途"></label>
       <label class="wide"><span>备注</span><textarea data-finance-note rows="3" maxlength="500" placeholder="可选">${escapeHtml(entry?.note || '')}</textarea></label>
     </div>
     <footer>${editing ? '<button class="danger" type="button" data-finance-delete>删除</button>' : '<span></span>'}<div><button class="secondary" type="button" data-finance-close>取消</button><button class="primary" type="button" data-finance-save>保存</button></div></footer>
@@ -717,12 +770,12 @@ function openMobileFinanceDialog(entry = null) {
   element.addEventListener('click', async event => {
     if (event.target === element || event.target.closest('[data-finance-close]')) return close();
     if (event.target.closest('[data-finance-delete]')) {
-      if (!window.confirm('确定删除这条财务记录吗？')) return;
+      if (!window.confirm('确定删除这条账目记录吗？')) return;
       try {
         await window.caishen.saveBusinessFinanceEntry({ businessId: initialBusinessId, action: 'delete', id: entry.id });
         close();
         await loadMobileFinanceLedger();
-        toast('收入记录已删除');
+        toast('账目记录已删除');
       } catch (error) { toast(errorText(error), true); }
       return;
     }
@@ -731,10 +784,10 @@ function openMobileFinanceDialog(entry = null) {
     const businessId = editing
       ? initialBusinessId
       : element.querySelector('[data-finance-business]')?.value;
-    if (!['yongsha', 'duoxiluka'].includes(businessId)) return toast('请选择收入计入的业务', true);
+    if (!['yongsha', 'duoxiluka'].includes(businessId)) return toast('请选择账目计入的业务', true);
     const payload = {
       date: element.querySelector('[data-finance-date]').value,
-      category: 'other_income',
+      category: element.querySelector('[data-finance-category]').value,
       counterparty: element.querySelector('[data-finance-counterparty]').value,
       amount: element.querySelector('[data-finance-amount]').value,
       currency: 'CNY',
@@ -752,7 +805,7 @@ function openMobileFinanceDialog(entry = null) {
       });
       close();
       await loadMobileFinanceLedger();
-      toast(editing ? '收入记录已更新' : '收入记录已添加');
+      toast(editing ? '账目记录已更新' : '账目记录已添加');
     } catch (error) {
       saveButton.disabled = false;
       toast(errorText(error), true);
@@ -942,7 +995,10 @@ function renderMobileStats() {
     { key: 'today', label: '今天' },
     { key: 'yesterday', label: '昨天' },
     { key: '7d', label: '近 7 天' },
-    { key: 'month', label: '本月' }
+    { key: 'month', label: '本月' },
+    { key: 'last_month', label: '上月' },
+    { key: 'year', label: '本年' },
+    { key: 'last_year', label: '上年' }
   ];
   const businesses = (hub.businesses || []).map(item => ({
     ...item,
@@ -983,7 +1039,7 @@ function renderMobileStats() {
       <b>${formatInteger(requestCount)} 次请求</b>
     </section>
     <section class="mobile-ledger-primary-metrics">
-      <article><span>实际消耗</span><strong class="expense">${formatMobileStatsMoney(ledgerTotals.consumptionUsdMinor)}</strong><small>来自 API 实际扣费</small></article>
+      <article><span>已消费收入</span><strong class="expense">${formatMobileStatsMoney(ledgerTotals.consumptionUsdMinor)}</strong><small>客户已实际使用的额度</small></article>
       <article><span>API 请求</span><strong>${formatInteger(requestCount)}</strong><small>${escapeHtml(selectedRange.label)}内</small></article>
     </section>
     <button class="mobile-finance-more" id="mobileFinanceMore" type="button" aria-expanded="${state.mobileFinanceExpanded}">${state.mobileFinanceExpanded ? '收起账本' : 'More'}</button>
@@ -1031,8 +1087,9 @@ async function loadMobileStats() {
   state.mobileFinanceError = '';
   renderMobileStats();
   try {
+    const rangeRequest = mobileFinanceRangeRequest();
     state.mobileBusinessHub = await window.caishen.getBusinessHubOverview({
-      range: state.mobileFinanceRange,
+      ...rangeRequest,
       includeRecharges: false
     });
     if (state.mobileFinanceBusinessId !== 'all' && !state.mobileBusinessHub.businesses?.some(

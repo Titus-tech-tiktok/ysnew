@@ -3,6 +3,40 @@ function createBusinessSnapshotService(options) {
   const businessId = String(options.businessId || 'business').trim();
   const businessName = String(options.businessName || businessId).trim();
 
+  async function attachFinance(report = {}, targetBusinessId = businessId) {
+    const finance = await runtime.financeLedger.listRange({
+      startDate: report.startDate,
+      endDate: report.endDate,
+      relayId: report.relayId,
+      businessId: targetBusinessId
+    });
+    const customerReceiptsCnyMinor = Number(finance.summary.customerReceiptsCnyMinor) || 0;
+    const recognizedRevenueCnyMinor = Number(report.totals?.confirmedRevenueCnyMinor) || 0;
+    const upstreamActualCostCnyMinor = Number(report.totals?.upstreamCostCnyMinor) || 0;
+    const otherExpensesCnyMinor = Number(finance.summary.operatingExpensesCnyMinor) || 0;
+    const upstreamTopupsCnyMinor = Number(finance.summary.gatewayTopupsCnyMinor) || 0;
+    const operatingProfitCnyMinor = recognizedRevenueCnyMinor - upstreamActualCostCnyMinor - otherExpensesCnyMinor;
+    const netCashFlowCnyMinor = customerReceiptsCnyMinor - upstreamTopupsCnyMinor - otherExpensesCnyMinor;
+    return {
+      ...report,
+      finance,
+      totals: {
+        ...(report.totals || {}),
+        customerReceiptsCnyMinor,
+        recognizedRevenueCnyMinor,
+        upstreamActualCostCnyMinor,
+        otherExpensesCnyMinor,
+        upstreamTopupsCnyMinor,
+        operatingProfitCnyMinor,
+        netCashFlowCnyMinor,
+        businessRevenueCnyMinor: recognizedRevenueCnyMinor,
+        operatingExpensesCnyMinor: otherExpensesCnyMinor,
+        totalExpensesCnyMinor: upstreamActualCostCnyMinor + otherExpensesCnyMinor,
+        netProfitCnyMinor: operatingProfitCnyMinor
+      }
+    };
+  }
+
   async function accounting(query = {}) {
     const [users, apiSettings] = await Promise.all([auth.listUsers(), runtime.loadApiSettings()]);
     const userLookup = new Map(users.map(user => [user.workspaceId, user]));
@@ -12,26 +46,7 @@ function createBusinessSnapshotService(options) {
       endDate: String(query.endDate || ''),
       relayId: String(query.relayId || '')
     });
-    const finance = await runtime.financeLedger.listRange({
-      startDate: report.startDate,
-      endDate: report.endDate,
-      relayId: report.relayId
-    });
-    const manualIncomeCnyMinor = Number(finance.summary.otherIncomeCnyMinor) || 0;
-    const actualConsumptionCnyMinor = Number(report.totals.confirmedRevenueCnyMinor) || 0;
-    return {
-      ...report,
-      finance,
-      totals: {
-        ...report.totals,
-        otherIncomeCnyMinor: manualIncomeCnyMinor,
-        manualIncomeCnyMinor,
-        actualConsumptionCnyMinor,
-        businessRevenueCnyMinor: manualIncomeCnyMinor,
-        totalExpensesCnyMinor: actualConsumptionCnyMinor,
-        netProfitCnyMinor: manualIncomeCnyMinor - actualConsumptionCnyMinor
-      }
-    };
+    return attachFinance(report, businessId);
   }
 
   async function snapshot(query = {}) {
@@ -81,15 +96,23 @@ function createBusinessSnapshotService(options) {
   async function financeEntryAction(payload = {}) {
     const action = String(payload.action || '');
     const id = String(payload.id || '');
-    const entry = { ...(payload.entry || {}), category: 'other_income' };
+    const category = String(payload.entry?.category || 'client_payment');
+    if (!['client_payment', 'gateway_topup', 'other_expense', 'other_income'].includes(category)) {
+      throw new Error('经营账目类型无效');
+    }
+    const entry = {
+      ...(payload.entry || {}),
+      category,
+      businessId: String(payload.businessId || payload.entry?.businessId || businessId)
+    };
     if (action === 'create') return runtime.financeLedger.create(entry);
-    if (!id) throw new Error('收入记录编号不能为空');
+    if (!id) throw new Error('账目记录编号不能为空');
     if (action === 'update') return runtime.financeLedger.update(id, entry);
     if (action === 'delete') return runtime.financeLedger.remove(id);
-    throw new Error('不支持的收入记录操作');
+    throw new Error('不支持的账目记录操作');
   }
 
-  return { accounting, financeEntryAction, rechargeAction, snapshot };
+  return { accounting, attachFinance, financeEntryAction, rechargeAction, snapshot };
 }
 
 module.exports = { createBusinessSnapshotService };

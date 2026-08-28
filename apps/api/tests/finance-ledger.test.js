@@ -40,14 +40,21 @@ test('finance ledger separates profit expenses from gateway cash transfers', asy
     amount: '10.00',
     currency: 'CNY'
   });
+  await ledger.create({
+    date: '2026-08-10',
+    businessId: 'duoxiluka',
+    category: 'client_payment',
+    amount: '30.00',
+    currency: 'CNY'
+  });
 
   const august = await ledger.list('2026-08');
-  assert.equal(august.entries.length, 3);
-  assert.equal(august.summary.monthlyRevenueCnyMinor, 70_000);
+  assert.equal(august.entries.length, 4);
+  assert.equal(august.summary.monthlyRevenueCnyMinor, 73_000);
   assert.equal(august.summary.operatingExpensesCnyMinor, 5_000);
   assert.equal(august.summary.gatewayTopupsCnyMinor, 20_000);
-  assert.equal(august.summary.manualCashFlowCnyMinor, 45_000);
-  assert.equal(august.summary.totalRevenueCnyMinor, 71_000);
+  assert.equal(august.summary.manualCashFlowCnyMinor, 48_000);
+  assert.equal(august.summary.totalRevenueCnyMinor, 74_000);
   assert.equal(august.summary.byRelay[0].relayId, 'relay-one');
   assert.equal(august.summary.byRelay[0].totalGatewayTopupsCnyMinor, 20_000);
 
@@ -56,19 +63,23 @@ test('finance ledger separates profit expenses from gateway cash transfers', asy
   assert.equal(relayRange.summary.gatewayTopupsCnyMinor, 20_000);
   assert.equal(relayRange.summary.operatingExpensesCnyMinor, 0);
 
-  const allRange = await ledger.listRange({ startDate: '2026-08-10', endDate: '2026-08-11' });
+  const allRange = await ledger.listRange({ startDate: '2026-08-10', endDate: '2026-08-11', businessId: 'yongsha' });
   assert.equal(allRange.entries.length, 3);
   assert.equal(allRange.summary.operatingExpensesCnyMinor, 5_000);
   assert.equal(allRange.summary.otherIncomeCnyMinor, 0);
   assert.equal(allRange.summary.legacyClientPaymentsCnyMinor, 70_000);
+  assert.equal(allRange.summary.customerReceiptsCnyMinor, 70_000);
+  const duoxiRange = await ledger.listRange({ startDate: '2026-08-10', endDate: '2026-08-11', businessId: 'duoxiluka' });
+  assert.equal(duoxiRange.entries.length, 1);
+  assert.equal(duoxiRange.summary.customerReceiptsCnyMinor, 3_000);
 
   const updated = await ledger.update(expense.id, { amount: '75.50', note: '调整后' });
   assert.equal(updated.amountCnyMinor, 7_550);
   assert.equal(updated.note, '调整后');
   await ledger.remove(income.id);
   const afterDelete = await ledger.list('2026-08');
-  assert.equal(afterDelete.entries.length, 2);
-  assert.equal(afterDelete.summary.monthlyRevenueCnyMinor, 0);
+  assert.equal(afterDelete.entries.length, 3);
+  assert.equal(afterDelete.summary.monthlyRevenueCnyMinor, 3_000);
 });
 
 test('finance ledger rejects invalid categories and money values', async t => {
