@@ -41,4 +41,7 @@ test('mobile ledger combines both business balances and request counts', async (
   assert.match(renderBlock, /upstreamRequests\?\.count/);
   assert.match(renderBlock, /mobileFinanceLedgerTotals\(item\.accounting\)\.balanceUsdMinor/);
   assert.match(renderBlock, /团队当前可用余额/);
+  assert.match(renderBlock, /中转站真实余额/);
+  assert.match(renderBlock, /hub\.upstreamBalances/);
+  assert.match(renderBlock, /低于 \$20 标红/);
 });

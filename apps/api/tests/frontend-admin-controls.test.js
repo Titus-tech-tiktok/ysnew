@@ -42,7 +42,7 @@ test('超级管理员可强制用户下次登录改密并查看加密记录', as
   assert.match(bridge, /revealUserPassword:[\s\S]*reveal-password/);
 });
 
-test('全局价格和上游余额接口已从界面移除', async () => {
+test('全局价格和旧版上游余额 RPC 已移除，新余额凭据保留在中转站设置', async () => {
   const [html, renderer, bridge] = await Promise.all([
     fs.readFile(path.join(webRoot, 'index.html'), 'utf8'),
     fs.readFile(path.join(webRoot, 'src/renderer.js'), 'utf8'),
@@ -51,6 +51,9 @@ test('全局价格和上游余额接口已从界面移除', async () => {
   assert.doesNotMatch(html, /id="billingImageFeeMin"|id="billingImageFeeMax"|id="billingDefaultBalance"/);
   assert.doesNotMatch(renderer, /getGatewayUsage|usagePath|data-relay-usage/);
   assert.doesNotMatch(bridge, /billing\/gateway-usage/);
+  assert.match(renderer, /data-relay-field="balanceAccessToken"/);
+  assert.match(renderer, /data-relay-field="clearBalanceAccessToken"/);
+  assert.match(renderer, /留空会保留原令牌/);
   assert.match(renderer, /data-relay-field="imagePriceMinMinor"/);
   assert.match(renderer, /data-relay-field="imagePriceMaxMinor"/);
   assert.match(renderer, /step="0\.000001"/);

@@ -9,6 +9,7 @@ function relay(overrides = {}) {
     id: 'primary', name: '主中转站', description: '生产线路', enabled: true,
     baseUrl: 'https://api.change2pro.com',
     imageApiKey: 'image-private-key', imageModel: 'gpt-image-custom',
+    balanceAccessToken: 'balance-private-token', balanceUserId: '7',
     imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000,
     customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 20000,
     ...overrides
@@ -56,6 +57,8 @@ test('API settings migrate to image-only relays and keep credentials private', a
     assert.equal(saved.version, 4);
     assert.equal(saved.activeRelayId, 'primary');
     assert.equal(saved.relays[0].imageKeyConfigured, true);
+    assert.equal(saved.relays[0].balanceAccessTokenConfigured, true);
+    assert.equal(Object.hasOwn(saved.relays[0], 'balanceAccessToken'), false);
     assert.equal(saved.relays[0].customerCnyPerUsd, 7);
     assert.equal(saved.relays[0].upstreamImageCostCnyMicro, 20000);
     assert.equal(saved.configured, true);
@@ -72,9 +75,10 @@ test('API settings migrate to image-only relays and keep credentials private', a
 
     const preserved = await runtime.saveApiSettings({
       ...highConcurrency,
-      relays: highConcurrency.relays.map(item => ({ ...item, imageApiKey: '' }))
+      relays: highConcurrency.relays.map(item => ({ ...item, imageApiKey: '', balanceAccessToken: '' }))
     });
     assert.equal(preserved.relays[0].imageKeyConfigured, true);
+    assert.equal(preserved.relays[0].balanceAccessTokenConfigured, true);
     await assert.rejects(() => runtime.saveApiSettings({
       ...saved,
       relays: saved.relays.map(item => ({ ...item, imagePriceMinMinor: 300001, imagePriceMaxMinor: 300000 }))
@@ -83,6 +87,8 @@ test('API settings migrate to image-only relays and keep credentials private', a
     const privateValue = JSON.parse(await fs.readFile(path.join(temp, 'system', 'api-settings.json'), 'utf8'));
     assert.equal(privateValue.version, 4);
     assert.equal(privateValue.relays[0].imageKey, 'image-private-key');
+    assert.equal(privateValue.relays[0].balanceAccessToken, 'balance-private-token');
+    assert.equal(privateValue.relays[0].balanceUserId, '7');
     for (const field of ['analysisKey', 'analysisBaseUrl', 'analysisModel', 'analysisWireApi', 'analysisPriceMinMinor']) {
       assert.equal(Object.hasOwn(privateValue.relays[0], field), false);
     }
@@ -124,8 +130,7 @@ test('relay choices expose only names and descriptions while superadmin settings
     assert.equal(choices.activeRelayId, 'primary');
     assert.deepEqual(choices.relays.map(item => item.id), ['primary', 'backup']);
     assert.equal(choices.relays[0].name, '主中转站');
-    assert.equal(choices.relays[0].imagePriceMinMinor, 300000);
-    for (const field of ['baseUrl', 'imageKey', 'imageKeyMasked', 'imageModel', 'usagePath', 'customerCnyPerUsd', 'upstreamImageCostCnyMicro']) {
+    for (const field of ['baseUrl', 'imageKey', 'imageKeyMasked', 'balanceAccessToken', 'balanceAccessTokenConfigured', 'balanceAccessTokenMasked', 'balanceUserId', 'imageModel', 'usagePath', 'imagePriceMinMinor', 'imagePriceMaxMinor', 'customerCnyPerUsd', 'upstreamImageCostCnyMicro']) {
       assert.equal(Object.hasOwn(choices.relays[0], field), false);
     }
 
@@ -148,5 +153,24 @@ test('relay choices expose only names and descriptions while superadmin settings
     assert.deepEqual(empty.relays, []);
     assert.deepEqual((await runtime.loadRelayChoices()).relays, []);
     assert.deepEqual((await runtime.loadApiSettings()).relays, []);
+  });
+});
+
+test('balance access token is preserved on blank input and cleared only by an explicit flag', async () => {
+  await withRuntime('relay-balance-token-clear', async (runtime, temp) => {
+    const saved = await runtime.saveApiSettings({ activeRelayId: 'primary', relays: [relay()] });
+    const preserved = await runtime.saveApiSettings({
+      ...saved,
+      relays: saved.relays.map(item => ({ ...item, imageApiKey: '', balanceAccessToken: '' }))
+    });
+    assert.equal(preserved.relays[0].balanceAccessTokenConfigured, true);
+
+    const cleared = await runtime.saveApiSettings({
+      ...preserved,
+      relays: preserved.relays.map(item => ({ ...item, imageApiKey: '', clearBalanceAccessToken: true }))
+    });
+    assert.equal(cleared.relays[0].balanceAccessTokenConfigured, false);
+    const privateValue = JSON.parse(await fs.readFile(path.join(temp, 'system', 'api-settings.json'), 'utf8'));
+    assert.equal(privateValue.relays[0].balanceAccessToken, '');
   });
 });

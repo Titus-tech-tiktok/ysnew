@@ -41,6 +41,23 @@ const SUPERADMIN_RPC_METHODS = new Set([
   'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth', 'savePromptSetting', 'resetPromptSetting'
 ]);
 
+async function loadRelayBalancesSafely() {
+  try {
+    const balances = await runtime.loadRelayBalances();
+    return Array.isArray(balances) ? balances : [];
+  } catch {
+    return [{
+      relayId: '',
+      relayName: '中转站余额',
+      provider: 'unknown',
+      status: 'error',
+      error: 'balance_service_unavailable',
+      message: '余额服务暂时不可用',
+      checkedAt: new Date().toISOString()
+    }];
+  }
+}
+
 function canAccessRpc(user, method) {
   const name = String(method || '');
   if (SUPERADMIN_RPC_METHODS.has(name)) return user?.role === 'superadmin';
@@ -1389,7 +1406,19 @@ async function startServer() {
       const allUsers = await auth.listUsers();
       const users = billingVisibleUsersForActor(allUsers, req.user);
       const visibleWorkspaceIds = new Set(users.map(user => user.workspaceId));
-      const relayChoices = await runtime.loadRelayChoices(true);
+      const relayChoices = req.user.role === 'superadmin'
+        ? await runtime.loadApiSettings().then(settings => ({
+            activeRelayId: settings.activeRelayId,
+            relays: (settings.relays || []).map(relay => ({
+              id: relay.id,
+              name: relay.name,
+              description: relay.description,
+              enabled: relay.enabled !== false,
+              imagePriceMinMinor: relay.imagePriceMinMinor,
+              imagePriceMaxMinor: relay.imagePriceMaxMinor
+            }))
+          }))
+        : await runtime.loadRelayChoices(true);
       const [rules, accounts, transactions] = await Promise.all([
         req.user.role === 'superadmin' ? runtime.billing.getRules() : Promise.resolve(undefined),
         runtime.billing.listAccounts(users.map(user => user.workspaceId), relayChoices.relays.map(relay => relay.id)),
@@ -1481,7 +1510,10 @@ async function startServer() {
       endDate: String(req.query.endDate || ''),
       includeRecharges: req.query.includeRecharges !== '0'
     };
-    const local = await businessSnapshot.snapshot(query);
+    const [local, upstreamBalances] = await Promise.all([
+      businessSnapshot.snapshot(query),
+      loadRelayBalancesSafely()
+    ]);
     const businesses = [{ ...local, available: true }];
     if (DUOXI_BUSINESS_URL) {
       try {
@@ -1504,6 +1536,7 @@ async function startServer() {
         generatedAt: new Date().toISOString(),
         range: query.range,
         businesses,
+        upstreamBalances,
         totals: {
           businessRevenueCnyMinor: sum('businessRevenueCnyMinor'),
           totalExpensesCnyMinor: sum('totalExpensesCnyMinor'),
@@ -1923,6 +1956,7 @@ module.exports = {
   deleteAssetFiles,
   isWithin,
   normalizedThumbnailWidth,
+  loadRelayBalancesSafely,
   safeRelative,
   startServer,
   UPLOAD_FILE_LIMIT_MB,

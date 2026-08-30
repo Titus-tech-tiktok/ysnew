@@ -8015,6 +8015,112 @@ label input, label textarea {
   color: #a84e44;
 }
 
+.mobile-upstream-balance-panel {
+  padding: 16px;
+  border: 1px solid rgba(47, 124, 116, .2);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 34px rgba(16, 27, 43, .07);
+}
+
+.mobile-upstream-balance-panel > header,
+.mobile-upstream-balance-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobile-upstream-balance-panel > header span,
+.mobile-upstream-balance-panel > header small,
+.mobile-upstream-balance-card small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.mobile-upstream-balance-panel > header h2 {
+  margin: 3px 0 0;
+  color: var(--navy);
+  font-size: 17px;
+}
+
+.mobile-upstream-balance-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 13px;
+}
+
+.mobile-upstream-balance-card {
+  padding: 13px;
+  border-radius: 15px;
+  background: #f1f7f4;
+}
+
+.mobile-upstream-balance-card div,
+.mobile-upstream-balance-card span,
+.mobile-upstream-balance-card small {
+  display: block;
+  min-width: 0;
+}
+
+.mobile-upstream-balance-card span {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.mobile-upstream-balance-card small {
+  overflow: hidden;
+  margin-top: 4px;
+  text-overflow: ellipsis;
+}
+
+.mobile-upstream-balance-card strong {
+  flex: 0 0 auto;
+  color: var(--teal);
+  font-size: 20px;
+}
+
+.mobile-upstream-balance-card.low {
+  background: #fff0ed;
+}
+
+.mobile-upstream-balance-card.low strong,
+.mobile-upstream-balance-card.unavailable strong {
+  color: #a84e44;
+}
+
+.mobile-upstream-balance-card.unavailable {
+  align-items: flex-start;
+  background: #fff7ed;
+}
+
+.mobile-upstream-balance-card.unavailable strong {
+  font-size: 12px;
+}
+
+.relay-secret-clear {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.relay-secret-clear input {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+}
+
+.mobile-upstream-balance-empty {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
 .mobile-finance-more {
   width: 100%;
   min-height: 48px;

@@ -64,6 +64,7 @@ const {
 } = require('./core/template-mask');
 const { createBillingService } = require('./billing');
 const { createFinanceLedgerService } = require('./finance-ledger');
+const { queryRelayBalances } = require('./relay-balance');
 
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
@@ -454,6 +455,7 @@ function normalizeRelays(value, currentSettings = {}) {
     seen.add(id);
     const current = currentById.get(id) || {};
     const imageKeyInput = String(item?.imageApiKey ?? item?.imageKey ?? item?.apiKey ?? '').trim();
+    const balanceAccessTokenInput = String(item?.balanceAccessToken ?? '').trim();
     const baseUrl = normalizeApiBaseUrl(item?.baseUrl || current.baseUrl || '');
     const imageRange = relayMinorRange(item, current, 'image');
     return [{
@@ -463,6 +465,8 @@ function normalizeRelays(value, currentSettings = {}) {
       enabled: item?.enabled !== undefined ? item.enabled !== false : current.enabled !== false,
       baseUrl,
       imageKey: item?.clearImageKey === true ? '' : imageKeyInput || current.imageKey || '',
+      balanceAccessToken: item?.clearBalanceAccessToken === true ? '' : balanceAccessTokenInput || current.balanceAccessToken || '',
+      balanceUserId: normalizeRelayText(item?.balanceUserId ?? current.balanceUserId ?? '', '', 80),
       imageModel: normalizeOptionalModelName(item?.imageModel ?? current.imageModel ?? ''),
       healthPath: normalizeRelayPath(item?.healthPath || current.healthPath, '/models'),
       modelsPath: normalizeRelayPath(item?.modelsPath || current.modelsPath, '/models'),
@@ -475,11 +479,13 @@ function normalizeRelays(value, currentSettings = {}) {
 }
 
 function publicRelay(item) {
-  const { imageKey, ...rest } = item;
+  const { imageKey, balanceAccessToken, ...rest } = item;
   return {
     ...rest,
     imageKeyConfigured: Boolean(imageKey),
-    imageKeyMasked: maskedApiKey(imageKey)
+    imageKeyMasked: maskedApiKey(imageKey),
+    balanceAccessTokenConfigured: Boolean(balanceAccessToken),
+    balanceAccessTokenMasked: maskedApiKey(balanceAccessToken)
   };
 }
 
@@ -488,9 +494,7 @@ function publicRelayChoice(item) {
     id: item.id,
     name: item.name,
     description: item.description,
-    enabled: item.enabled !== false,
-    imagePriceMinMinor: item.imagePriceMinMinor,
-    imagePriceMaxMinor: item.imagePriceMaxMinor
+    enabled: item.enabled !== false
   };
 }
 
@@ -629,6 +633,11 @@ async function loadRelayChoices(includeDisabled = false) {
     allowAdminPromptView: settings.allowAdminPromptView === true,
     relays: (settings.relays || []).filter(item => includeDisabled || item.enabled !== false).map(publicRelayChoice)
   };
+}
+
+async function loadRelayBalances() {
+  const settings = await readPrivateApiSettings();
+  return queryRelayBalances((settings.relays || []).filter(item => item.enabled !== false));
 }
 
 async function saveActiveRelay(activeRelayId) {
@@ -3134,6 +3143,7 @@ const runtimeExports = {
   loadApiSettings,
   loadConfig,
   loadPromptSettings,
+  loadRelayBalances,
   loadRelayChoices,
   planTemplateOutputJobs,
   runWithWorkspace,

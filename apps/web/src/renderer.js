@@ -1022,6 +1022,18 @@ function renderMobileStats() {
       return `${mobileBusinessDisplayName(item.id, item.name)} ${formatMobileStatsMoney(balance)}`;
     }).join(' · ')
     : `${mobileBusinessDisplayName(selectedBusiness?.id, selectedBusiness?.name)}团队当前余额`;
+  const upstreamBalances = Array.isArray(hub.upstreamBalances) ? hub.upstreamBalances : [];
+  const upstreamBalanceHtml = upstreamBalances.length ? upstreamBalances.map(item => {
+    const ok = item.status === 'ok' && Number.isFinite(Number(item.balance));
+    const amount = ok
+      ? `${item.currency === 'CNY' ? '¥' : item.currency === 'USD' ? '$' : ''}${Number(item.balance).toFixed(2)}${item.currency === 'TOKENS' ? ' tokens' : ''}`
+      : '暂不可用';
+    const low = ok && item.currency === 'USD' && Number(item.balance) < 20;
+    return `<article class="mobile-upstream-balance-card${ok ? '' : ' unavailable'}${low ? ' low' : ''}">
+      <div><span>${escapeHtml(item.relayName || '中转站')}</span><small>${escapeHtml(item.message || '已读取上游余额')}</small></div>
+      <strong>${escapeHtml(amount)}</strong>
+    </article>`;
+  }).join('') : '<div class="mobile-upstream-balance-empty">暂无中转站余额配置</div>';
   const selectedRange = ranges.find(item => item.key === state.mobileFinanceRange) || ranges[0];
   state.mobileAccounting = accounting;
   state.mobileFinanceData = accounting.finance;
@@ -1044,6 +1056,10 @@ function renderMobileStats() {
     <section class="mobile-ledger-primary-metrics">
       <article><span>已消费收入</span><strong class="expense">${formatMobileStatsMoney(ledgerTotals.consumptionUsdMinor)}</strong><small>客户已实际使用的额度</small></article>
       <article><span>API 请求</span><strong>${formatInteger(requestCount)}</strong><small>${escapeHtml(selectedRange.label)}内</small></article>
+    </section>
+    <section class="mobile-upstream-balance-panel">
+      <header><div><span>上游保障</span><h2>中转站真实余额</h2></div><small>低于 $20 标红</small></header>
+      <div class="mobile-upstream-balance-list">${upstreamBalanceHtml}</div>
     </section>
     <button class="mobile-finance-more" id="mobileFinanceMore" type="button" aria-expanded="${state.mobileFinanceExpanded}">${state.mobileFinanceExpanded ? '收起账本' : 'More'}</button>
     ${mobileFinancePanelHtml()}`;
@@ -4967,6 +4983,7 @@ function newRelayDraft() {
     _unsaved: true,
     id: `relay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     name: '新中转站', description: '', enabled: true, baseUrl: '', imageModel: '',
+    balanceAccessToken: '', balanceUserId: '',
     healthPath: '/models', modelsPath: '/models',
     imagePriceMinMinor: 0, imagePriceMaxMinor: 0,
     customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 0
@@ -4988,6 +5005,9 @@ function relayRowPayload(row) {
     enabled: read('enabled')?.checked !== false,
     baseUrl: read('baseUrl')?.value.trim() || '',
     imageApiKey: read('imageKey')?.value.trim() || '',
+    balanceAccessToken: read('balanceAccessToken')?.value.trim() || '',
+    clearBalanceAccessToken: read('clearBalanceAccessToken')?.checked === true,
+    balanceUserId: read('balanceUserId')?.value.trim() || '',
     imageModel: read('imageModel')?.value.trim() || '',
     healthPath: read('healthPath')?.value.trim() || '/models',
     modelsPath: read('modelsPath')?.value.trim() || '/models',
@@ -5041,6 +5061,8 @@ function renderRelayStations() {
           <label>管理员看到的介绍<input data-relay-field="description" value="${escapeHtml(item.description || '')}"></label>
           <label>OpenAI Base URL<input data-relay-field="baseUrl" type="url" value="${escapeHtml(item.baseUrl || '')}" placeholder="https://example.com/v1" spellcheck="false"></label>
           <label>图片 API Key<input data-relay-field="imageKey" type="password" placeholder="${item.imageKeyConfigured ? `已保存：${escapeHtml(item.imageKeyMasked || '')}` : '输入图片 API Key'}" autocomplete="new-password"></label>
+          <label>站点访问令牌（New API 余额）<input data-relay-field="balanceAccessToken" type="password" placeholder="${item.balanceAccessTokenConfigured ? `已保存：${escapeHtml(item.balanceAccessTokenMasked || '')}` : 'New API 站点才需要填写'}" autocomplete="new-password"><small>不是 sk- 调用密钥；Change2Pro 无需填写。留空会保留原令牌。</small>${item.balanceAccessTokenConfigured ? '<span class="relay-secret-clear"><input data-relay-field="clearBalanceAccessToken" type="checkbox"> 明确清除已保存令牌</span>' : ''}</label>
+          <label>New API 用户 ID（旧版可选）<input data-relay-field="balanceUserId" value="${escapeHtml(item.balanceUserId || '')}" placeholder="通常留空" spellcheck="false"></label>
           <label>图片模型（读取后选择）<input data-relay-field="imageModel" value="${escapeHtml(item.imageModel || '')}" readonly placeholder="请点击读取图片模型"></label>
           <label>健康检测接口<input data-relay-field="healthPath" value="${escapeHtml(item.healthPath || '/models')}" placeholder="/models" spellcheck="false"></label>
           <label>模型列表接口<input data-relay-field="modelsPath" value="${escapeHtml(item.modelsPath || '/models')}" placeholder="/models" spellcheck="false"></label>
@@ -5154,7 +5176,7 @@ function renderApiSettings() {
   }
   if (footnoteRow) footnoteRow.hidden = false;
   if (relayHeading) relayHeading.textContent = '中转站';
-  if (relayDescription) relayDescription.textContent = '每个中转站独立保存地址、密钥、模型和本站扣费标准；不依赖上游余额接口。';
+  if (relayDescription) relayDescription.textContent = '每个中转站独立保存地址、密钥、模型、余额查询凭据和本站扣费标准。';
   if (footnote) footnote.textContent = '保存后，当前中转站的新配置会立即用于后续任务。';
   $('.api-layout-grid').hidden = false;
   $('.api-advanced-settings').hidden = false;
