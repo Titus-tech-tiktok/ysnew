@@ -9,12 +9,12 @@ test('mobile ledger keeps operating and cash-flow details collapsed behind More'
 
   assert.match(renderer, /mobileFinanceExpanded: false/);
   assert.match(renderer, /id="mobileFinanceMore"/);
-  assert.match(renderer, /state\.mobileFinanceExpanded \? '收起账本' : 'More'/);
+  assert.match(renderer, /state\.mobileFinanceExpanded \? mobileText\('collapseLedger'\) : mobileText\('more'\)/);
   assert.match(panel, /if \(!state\.mobileFinanceExpanded\) return ''/);
   for (const label of ['客户到账', '已消费收入', '上游实际成本', '其他费用', '经营利润', '上游充值', '净现金流']) {
-    assert.match(panel, new RegExp(label));
+    assert.match(renderer, new RegExp(label));
   }
-  assert.match(panel, /账本明细/);
+  assert.match(panel, /mobileText\('ledgerDetails'\)/);
 });
 
 test('mobile ledger filters businesses and separates operating profit from net cash flow', async () => {
@@ -43,10 +43,10 @@ test('ledger dialog records receipts, upstream topups and expenses for either bu
   const dialog = renderer.match(/function openMobileFinanceDialog\(entry = null\)[\s\S]*?\n\}/)?.[0] || '';
 
   assert.match(dialog, /data-finance-business/);
-  assert.match(dialog, /计入业务/);
+  assert.match(dialog, /mobileText\('includedBusiness'\)/);
   assert.match(dialog, /availableBusinesses/);
-  assert.match(dialog, /请选择账目计入的业务/);
-  assert.match(dialog, /金额（CNY）/);
+  assert.match(dialog, /mobileText\('chooseBusiness'\)/);
+  assert.match(dialog, /mobileText\('amountCny'\)/);
   assert.match(dialog, /data-finance-category/);
   assert.match(dialog, /client_payment/);
   assert.match(dialog, /gateway_topup/);

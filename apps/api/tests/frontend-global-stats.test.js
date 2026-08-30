@@ -19,12 +19,12 @@ test('mobile ledger uses one business selector and supports current and historic
 
   assert.match(renderBlock, /id="mobileFinanceBusiness"/);
   assert.match(renderBlock, /data-mobile-stats-range/);
-  assert.match(renderBlock, /\{ key: 'yesterday', label: '昨天' \}/);
-  assert.match(renderBlock, /\{ key: '7d', label: '近 7 天' \}/);
-  assert.match(renderBlock, /\{ key: 'month', label: '本月' \}/);
-  assert.match(renderBlock, /\{ key: 'last_month', label: '上月' \}/);
-  assert.match(renderBlock, /\{ key: 'year', label: '本年' \}/);
-  assert.match(renderBlock, /\{ key: 'last_year', label: '上年' \}/);
+  assert.match(renderBlock, /\{ key: 'yesterday', label: mobileText\('yesterday'\) \}/);
+  assert.match(renderBlock, /\{ key: '7d', label: mobileText\('sevenDays'\) \}/);
+  assert.match(renderBlock, /\{ key: 'month', label: mobileText\('thisMonth'\) \}/);
+  assert.match(renderBlock, /\{ key: 'last_month', label: mobileText\('lastMonth'\) \}/);
+  assert.match(renderBlock, /\{ key: 'year', label: mobileText\('thisYear'\) \}/);
+  assert.match(renderBlock, /\{ key: 'last_year', label: mobileText\('lastYear'\) \}/);
   assert.doesNotMatch(renderBlock, /Account Ranking|费用流水|Average Cost|First-pass success/);
   assert.match(loadBlock, /getBusinessHubOverview/);
   assert.match(loadBlock, /mobileFinanceRangeRequest/);
@@ -40,8 +40,21 @@ test('mobile ledger combines both business balances and request counts', async (
   assert.match(renderBlock, /availableBusinesses\.reduce/);
   assert.match(renderBlock, /upstreamRequests\?\.count/);
   assert.match(renderBlock, /mobileFinanceLedgerTotals\(item\.accounting\)\.balanceUsdMinor/);
-  assert.match(renderBlock, /团队当前可用余额/);
-  assert.match(renderBlock, /中转站真实余额/);
+  assert.match(renderBlock, /mobileText\('teamBalance'\)/);
+  assert.match(renderBlock, /mobileText\('realRelayBalance'\)/);
   assert.match(renderBlock, /hub\.upstreamBalances/);
-  assert.match(renderBlock, /低于 \$20 标红/);
+  assert.match(renderBlock, /mobileText\('lowBalanceHint'\)/);
+});
+
+test('mobile ledger switches Chinese and English and hides relay wallets with ledger details', async () => {
+  const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
+  const renderBlock = renderer.match(/function renderMobileStats\(\)[\s\S]*?\n\}/)?.[0] || '';
+
+  assert.match(renderer, /mobileStatsLanguage: loadMobileStatsLanguage\(\)/);
+  assert.match(renderer, /id="mobileStatsLanguageButton"/);
+  assert.match(renderer, /state\.mobileStatsLanguage === 'zh' \? 'en' : 'zh'/);
+  assert.match(renderer, /ledgerTitle: 'Business Ledger'/);
+  assert.match(renderer, /realRelayBalance: 'Real relay balance'/);
+  assert.match(renderBlock, /state\.mobileFinanceExpanded \? `<div class="mobile-finance-expanded-content"><section class="mobile-upstream-balance-panel">/);
+  assert.doesNotMatch(renderBlock, /<section class="mobile-upstream-balance-panel">[\s\S]*?<button class="mobile-finance-more"/);
 });

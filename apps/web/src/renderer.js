@@ -4,6 +4,7 @@ const ASSET_PREVIEW_SIZE_STORAGE_KEY = 'caishen-web-asset-preview-sizes-v1';
 const REVIEW_VIEWED_STORAGE_KEY = 'caishen-web-viewed-review-jobs-v1';
 const REVIEW_REGENERATION_RECORDS_STORAGE_KEY = 'caishen-web-review-regeneration-records-v1';
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'caishen-web-sidebar-collapsed-v1';
+const MOBILE_STATS_LANGUAGE_STORAGE_KEY = 'caishen-web-mobile-stats-language-v1';
 const ASSET_PAGE_SIZE = 100;
 let storageScope = 'anonymous';
 const scopedStorageKey = key => `${key}:${storageScope}`;
@@ -106,6 +107,10 @@ function persistReviewRegenerationRecords() {
   try { localStorage.setItem(scopedStorageKey(REVIEW_REGENERATION_RECORDS_STORAGE_KEY), JSON.stringify(state.reviewRegenerationRecords.slice(-300))); } catch {}
 }
 
+function loadMobileStatsLanguage() {
+  try { return localStorage.getItem(MOBILE_STATS_LANGUAGE_STORAGE_KEY) === 'en' ? 'en' : 'zh'; } catch { return 'zh'; }
+}
+
 const state = {
   currentUser: null,
   teamUsers: [],
@@ -139,6 +144,7 @@ const state = {
   mobileFinanceLoading: false,
   mobileFinanceError: '',
   mobileStatsUpdatedAt: '',
+  mobileStatsLanguage: loadMobileStatsLanguage(),
   config: null,
   products: [],
   prints: [],
@@ -420,6 +426,92 @@ function shouldOpenMobileStats() {
   return pathname === '/mobile-stats' || window.location.hash === '#mobile-stats' || params.get('view') === 'mobile-stats';
 }
 
+const MOBILE_STATS_TEXT = {
+  zh: {
+    privateFinance: '私人财务', ledgerTitle: '经营账本', loadingLatest: '正在读取最新数据', refresh: '刷新',
+    loadingAnalytics: '正在读取经营数据…', noAnalytics: '暂无经营数据', currentBusiness: '当前业务', allBusinesses: '全部业务',
+    disconnected: '未连接', yongsha: '永沙', lianrui: '练锐', today: '今天', yesterday: '昨天', sevenDays: '近 7 天',
+    thisMonth: '本月', lastMonth: '上月', thisYear: '本年', lastYear: '上年', teamBalance: '团队当前可用余额',
+    noBusinessBalance: '暂无可用业务余额', requests: '次请求', consumedRevenue: '已消费收入', consumedHint: '客户已实际使用的额度',
+    apiRequests: 'API 请求', withinRange: '内', upstreamGuard: '上游保障', realRelayBalance: '中转站真实余额',
+    lowBalanceHint: '低于 $20 标红', relayFallback: '中转站', readUpstreamBalance: '已读取上游余额', unavailable: '暂不可用',
+    walletBalance: '钱包余额', newApiAccountBalance: 'New API 账户余额', configureAccessToken: '请配置站点访问令牌', balanceQueryFailed: '余额查询失败',
+    noRelayBalance: '暂无中转站余额配置', more: 'More', collapseLedger: '收起账本', updatedAt: '更新于', synced: '数据已同步',
+    readingLedger: '正在读取财务账本…', customerReceipts: '客户到账', manualReceipts: '手工登记的实际收款',
+    upstreamActualCost: '上游实际成本', automaticImageCost: '按成功生图自动核算', otherExpenses: '其他费用',
+    manualExpenses: '手工登记的经营费用', operatingProfit: '经营利润', profitFormula: '已消费收入 − 上游成本 − 其他费用',
+    upstreamTopups: '上游充值', upstreamCashPaid: '实际支付给上游的现金', netCashFlow: '净现金流',
+    cashFlowFormula: '客户到账 − 上游充值 − 其他费用', all: '全部', income: '收入', expense: '支出', addEntry: '记一笔',
+    noEditableBusiness: '暂无可记账的业务', ledgerDetails: '账本明细', exportCsv: '导出 CSV', noLedgerEntries: '所选时间暂时没有符合条件的收支记录',
+    automatic: '系统自动统计', manual: '手工记录', publicLedger: '公共账目', images: '张',
+    accountingNote: '已消费收入和上游实际成本由系统自动核算；客户到账、上游充值和其他费用采用手工登记。',
+    refreshed: '经营数据已刷新', editEntry: '编辑账目', registerEntry: '登记账目', includedBusiness: '计入业务', ledgerType: '账目类型',
+    date: '日期', amountCny: '金额（CNY）', counterparty: '对方或用途', counterpartyPlaceholder: '例如：客户名称、上游名称或费用用途',
+    note: '备注', optional: '可选', delete: '删除', cancel: '取消', save: '保存', close: '关闭', confirmDelete: '确定删除这条账目记录吗？',
+    chooseBusiness: '请选择账目计入的业务', deleted: '账目记录已删除', updated: '账目记录已更新', added: '账目记录已添加'
+  },
+  en: {
+    privateFinance: 'PRIVATE FINANCE', ledgerTitle: 'Business Ledger', loadingLatest: 'Loading latest data', refresh: 'Refresh',
+    loadingAnalytics: 'Loading business data…', noAnalytics: 'No business data available', currentBusiness: 'Current business', allBusinesses: 'All businesses',
+    disconnected: 'Disconnected', yongsha: 'Yongsha', lianrui: 'Lianrui', today: 'Today', yesterday: 'Yesterday', sevenDays: '7 Days',
+    thisMonth: 'This Month', lastMonth: 'Last Month', thisYear: 'This Year', lastYear: 'Last Year', teamBalance: 'Team available balance',
+    noBusinessBalance: 'No available business balance', requests: 'requests', consumedRevenue: 'Consumed revenue', consumedHint: 'Credits actually consumed by customers',
+    apiRequests: 'API requests', withinRange: '', upstreamGuard: 'UPSTREAM WALLET', realRelayBalance: 'Real relay balance',
+    lowBalanceHint: 'Below $20 is highlighted', relayFallback: 'Relay', readUpstreamBalance: 'Upstream balance loaded', unavailable: 'Unavailable',
+    walletBalance: 'Wallet balance', newApiAccountBalance: 'New API account balance', configureAccessToken: 'Configure the site access token', balanceQueryFailed: 'Balance query failed',
+    noRelayBalance: 'No relay balance configured', more: 'More', collapseLedger: 'Collapse', updatedAt: 'Updated', synced: 'Data synced',
+    readingLedger: 'Loading ledger…', customerReceipts: 'Customer receipts', manualReceipts: 'Actual receipts entered manually',
+    upstreamActualCost: 'Actual upstream cost', automaticImageCost: 'Calculated from successful generations', otherExpenses: 'Other expenses',
+    manualExpenses: 'Operating expenses entered manually', operatingProfit: 'Operating profit', profitFormula: 'Consumed revenue − upstream cost − other expenses',
+    upstreamTopups: 'Upstream top-ups', upstreamCashPaid: 'Cash actually paid upstream', netCashFlow: 'Net cash flow',
+    cashFlowFormula: 'Customer receipts − upstream top-ups − other expenses', all: 'All', income: 'Income', expense: 'Expense', addEntry: 'Add entry',
+    noEditableBusiness: 'No editable business available', ledgerDetails: 'Ledger details', exportCsv: 'Export CSV', noLedgerEntries: 'No matching ledger entries for this period',
+    automatic: 'Auto calculated', manual: 'Manual entry', publicLedger: 'General ledger', images: 'images',
+    accountingNote: 'Consumed revenue and actual upstream cost are calculated automatically; receipts, upstream top-ups and other expenses are entered manually.',
+    refreshed: 'Business data refreshed', editEntry: 'Edit entry', registerEntry: 'Add ledger entry', includedBusiness: 'Business', ledgerType: 'Entry type',
+    date: 'Date', amountCny: 'Amount (CNY)', counterparty: 'Counterparty or purpose', counterpartyPlaceholder: 'Customer, upstream provider, or expense purpose',
+    note: 'Note', optional: 'Optional', delete: 'Delete', cancel: 'Cancel', save: 'Save', close: 'Close', confirmDelete: 'Delete this ledger entry?',
+    chooseBusiness: 'Choose a business for this entry', deleted: 'Ledger entry deleted', updated: 'Ledger entry updated', added: 'Ledger entry added'
+  }
+};
+
+function mobileText(key) {
+  return MOBILE_STATS_TEXT[state.mobileStatsLanguage]?.[key] || MOBILE_STATS_TEXT.zh[key] || key;
+}
+
+function mobileBusinessLocalizedName(id, fallback = '') {
+  return ({ yongsha: mobileText('yongsha'), duoxiluka: mobileText('lianrui') })[String(id || '')]
+    || fallback || mobileText('currentBusiness');
+}
+
+function mobileUpstreamStatusMessage(item = {}) {
+  if (state.mobileStatsLanguage === 'zh') return item.message || mobileText('readUpstreamBalance');
+  const message = String(item.message || '');
+  if (/访问令牌|access token/i.test(message)) return mobileText('configureAccessToken');
+  if (item.provider === 'sub2api') return mobileText('walletBalance');
+  if (item.provider === 'newapi') return mobileText('newApiAccountBalance');
+  return item.status === 'ok' ? mobileText('readUpstreamBalance') : mobileText('balanceQueryFailed');
+}
+
+function renderMobileStatsChrome() {
+  const kicker = $('#mobileStatsKicker');
+  const title = $('#mobileStatsTitle');
+  const updated = $('#mobileStatsUpdatedAt');
+  const refresh = $('#refreshMobileStatsButton');
+  const language = $('#mobileStatsLanguageButton');
+  if (kicker) kicker.textContent = mobileText('privateFinance');
+  if (title) title.textContent = mobileText('ledgerTitle');
+  if (updated && !state.mobileStatsUpdatedAt) updated.textContent = mobileText('loadingLatest');
+  if (refresh) {
+    refresh.textContent = mobileText('refresh');
+    refresh.setAttribute('aria-label', mobileText('refresh'));
+  }
+  if (language) {
+    language.textContent = state.mobileStatsLanguage === 'zh' ? 'EN' : '中文';
+    language.setAttribute('aria-label', state.mobileStatsLanguage === 'zh' ? 'Switch to English' : '切换为中文');
+  }
+}
+
 function ensureMobileStatsPage() {
   if ($('#page-mobile-stats')) return;
   const page = document.createElement('section');
@@ -430,17 +522,23 @@ function ensureMobileStatsPage() {
     <div class="mobile-stats-shell">
       <header class="mobile-stats-header">
         <div>
-          <span>PRIVATE FINANCE</span>
-          <h1>经营账本</h1>
+          <span id="mobileStatsKicker">私人财务</span>
+          <h1 id="mobileStatsTitle">经营账本</h1>
           <p id="mobileStatsUpdatedAt">正在读取最新数据</p>
         </div>
-        <button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="刷新">刷新</button>
+        <div class="mobile-stats-header-actions"><button class="mobile-stats-language-button" id="mobileStatsLanguageButton" type="button">EN</button><button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="刷新">刷新</button></div>
       </header>
       <div id="mobileStatsContent" class="mobile-stats-content">
         <div class="mobile-stats-loading">Loading analytics...</div>
       </div>
     </div>`;
   document.querySelector('main')?.append(page);
+  $('#mobileStatsLanguageButton').onclick = () => {
+    state.mobileStatsLanguage = state.mobileStatsLanguage === 'zh' ? 'en' : 'zh';
+    try { localStorage.setItem(MOBILE_STATS_LANGUAGE_STORAGE_KEY, state.mobileStatsLanguage); } catch {}
+    renderMobileStats();
+  };
+  renderMobileStatsChrome();
 }
 
 function mobileRangeLabel(range) {
@@ -492,14 +590,14 @@ function financeCategoryLabel(category) {
 
 function mobileFinanceRangeLabel(range = state.mobileFinanceRange) {
   return ({
-    today: '今天',
-    yesterday: '昨天',
-    '7d': '近 7 天',
-    month: '本月',
-    last_month: '上月',
-    year: '本年',
-    last_year: '上年'
-  })[range] || '今天';
+    today: mobileText('today'),
+    yesterday: mobileText('yesterday'),
+    '7d': mobileText('sevenDays'),
+    month: mobileText('thisMonth'),
+    last_month: mobileText('lastMonth'),
+    year: mobileText('thisYear'),
+    last_year: mobileText('lastYear')
+  })[range] || mobileText('today');
 }
 
 function mobileFinanceRangeRequest(range = state.mobileFinanceRange) {
@@ -559,6 +657,7 @@ function mobileFinanceBusinessEntries(accounting = state.mobileAccounting || {})
         relayName: point.relayName,
         title: '已消费收入',
         detail: `${formatInteger(point.successfulImages)} 张 · 系统自动统计`,
+        successfulImages: Number(point.successfulImages) || 0,
         amountCnyMinor: Number(point.revenueCnyMinor) || 0
       });
     }
@@ -572,6 +671,7 @@ function mobileFinanceBusinessEntries(accounting = state.mobileAccounting || {})
         relayName: point.relayName,
         title: '上游实际成本',
         detail: `${formatInteger(point.successfulImages)} 张 · 系统自动统计`,
+        successfulImages: Number(point.successfulImages) || 0,
         amountCnyMinor: Number(point.upstreamCostCnyMinor) || 0
       });
     }
@@ -624,16 +724,16 @@ function mobileFinanceAccountingView() {
     relays: available.flatMap(item => (item.accounting.relays || []).map(relay => ({
       ...relay,
       businessId: item.id,
-      businessName: item.name,
+      businessName: mobileBusinessLocalizedName(item.id, item.name),
       relayId: `${item.id}:${relay.relayId}`,
-      relayName: `${item.name} · ${relay.relayName}`
+      relayName: `${mobileBusinessLocalizedName(item.id, item.name)} · ${relay.relayName}`
     }))),
     daily: available.flatMap(item => (item.accounting.daily || []).map(point => ({
       ...point,
       businessId: item.id,
-      businessName: item.name,
+      businessName: mobileBusinessLocalizedName(item.id, item.name),
       relayId: `${item.id}:${point.relayId}`,
-      relayName: `${item.name} · ${point.relayName}`
+      relayName: `${mobileBusinessLocalizedName(item.id, item.name)} · ${point.relayName}`
     }))),
     finance: {
       summary: financeSummary,
@@ -641,18 +741,40 @@ function mobileFinanceAccountingView() {
         ...entry,
         id: `${item.id}:${entry.id}`,
         businessId: item.id,
-        businessName: item.name,
+        businessName: mobileBusinessLocalizedName(item.id, item.name),
         relayId: entry.relayId ? `${item.id}:${entry.relayId}` : '',
-        note: `${item.name}${entry.note ? ` · ${entry.note}` : ''}`
+        note: `${mobileBusinessLocalizedName(item.id, item.name)}${entry.note ? ` · ${entry.note}` : ''}`
       })))
     }
   };
 }
 
+function mobileFinanceEntryTitle(entry = {}) {
+  if (entry.automatic) return entry.direction === 'income' ? mobileText('consumedRevenue') : mobileText('upstreamActualCost');
+  if (entry.counterparty) return entry.counterparty;
+  return ({
+    client_payment: mobileText('customerReceipts'),
+    other_income: mobileText('income'),
+    gateway_topup: mobileText('upstreamTopups'),
+    other_expense: mobileText('otherExpenses')
+  })[entry.category] || entry.title || mobileText('ledgerDetails');
+}
+
+function mobileFinanceEntryDetail(entry = {}) {
+  if (entry.automatic) return `${formatInteger(entry.successfulImages)} ${mobileText('images')} · ${mobileText('automatic')}`;
+  const category = ({
+    client_payment: mobileText('customerReceipts'),
+    other_income: mobileText('income'),
+    gateway_topup: mobileText('upstreamTopups'),
+    other_expense: mobileText('otherExpenses')
+  })[entry.category] || financeCategoryLabel(entry.category);
+  return `${category}${entry.note ? ` · ${entry.note}` : ''}`;
+}
+
 function mobileFinancePanelHtml() {
   if (!state.mobileFinanceExpanded) return '';
   if (state.mobileFinanceLoading) {
-    return '<section class="mobile-finance-panel"><div class="mobile-finance-loading">正在读取财务账本…</div></section>';
+    return `<section class="mobile-finance-panel"><div class="mobile-finance-loading">${escapeHtml(mobileText('readingLedger'))}</div></section>`;
   }
   if (state.mobileFinanceError) {
     return `<section class="mobile-finance-panel"><div class="mobile-finance-loading error">${escapeHtml(state.mobileFinanceError)}</div></section>`;
@@ -669,27 +791,27 @@ function mobileFinancePanelHtml() {
   const entryHtml = visibleEntries.length ? visibleEntries.map(entry => `
     <${entry.automatic || !financeEditable ? 'div' : 'button'} class="mobile-finance-entry"${entry.automatic || !financeEditable ? '' : ` type="button" data-finance-entry-id="${escapeHtml(entry.id)}"`}>
       <span class="mobile-finance-entry-icon ${escapeHtml(entry.direction)}">${entry.direction === 'income' ? '+' : entry.direction === 'expense' ? '−' : '↔'}</span>
-      <span class="mobile-finance-entry-copy"><b>${escapeHtml(entry.title)}</b><small>${escapeHtml(entry.date)} · ${escapeHtml(relayNameById.get(entry.relayId) || entry.relayName || '公共账目')} · ${escapeHtml(entry.detail)}</small></span>
-      <span class="mobile-finance-entry-money ${escapeHtml(entry.direction)}"><b>${entry.direction === 'income' ? '+' : '-'}${formatFinanceCny(entry.amountCnyMinor)}</b><small>${entry.automatic ? '系统自动统计' : '手工记录'}</small></span>
-    </${entry.automatic || !financeEditable ? 'div' : 'button'}>`).join('') : '<div class="mobile-finance-empty">所选时间暂时没有符合条件的收支记录</div>';
+      <span class="mobile-finance-entry-copy"><b>${escapeHtml(mobileFinanceEntryTitle(entry))}</b><small>${escapeHtml(entry.date)} · ${escapeHtml(relayNameById.get(entry.relayId) || entry.relayName || mobileText('publicLedger'))} · ${escapeHtml(mobileFinanceEntryDetail(entry))}</small></span>
+      <span class="mobile-finance-entry-money ${escapeHtml(entry.direction)}"><b>${entry.direction === 'income' ? '+' : '-'}${formatFinanceCny(entry.amountCnyMinor)}</b><small>${entry.automatic ? mobileText('automatic') : mobileText('manual')}</small></span>
+    </${entry.automatic || !financeEditable ? 'div' : 'button'}>`).join('') : `<div class="mobile-finance-empty">${escapeHtml(mobileText('noLedgerEntries'))}</div>`;
   return `
     <section class="mobile-finance-panel">
       <div class="mobile-finance-kpis simple mobile-finance-summary-kpis">
-        <article><span>客户到账</span><strong>${formatFinanceCny(ledgerTotals.customerReceiptsCnyMinor)}</strong><small>手工登记的实际收款</small></article>
-        <article><span>已消费收入</span><strong>${formatFinanceCny(ledgerTotals.recognizedRevenueCnyMinor)}</strong><small>客户已实际使用的额度</small></article>
-        <article><span>上游实际成本</span><strong>${formatFinanceCny(ledgerTotals.upstreamActualCostCnyMinor)}</strong><small>按成功生图自动核算</small></article>
-        <article><span>其他费用</span><strong>${formatFinanceCny(ledgerTotals.otherExpensesCnyMinor)}</strong><small>手工登记的经营费用</small></article>
-        <article class="profit"><span>经营利润</span><strong>${formatFinanceCny(ledgerTotals.operatingProfitCnyMinor)}</strong><small>已消费收入 − 上游成本 − 其他费用</small></article>
-        <article><span>上游充值</span><strong>${formatFinanceCny(ledgerTotals.upstreamTopupsCnyMinor)}</strong><small>实际支付给上游的现金</small></article>
-        <article class="profit"><span>净现金流</span><strong>${formatFinanceCny(ledgerTotals.netCashFlowCnyMinor)}</strong><small>客户到账 − 上游充值 − 其他费用</small></article>
+        <article><span>${mobileText('customerReceipts')}</span><strong>${formatFinanceCny(ledgerTotals.customerReceiptsCnyMinor)}</strong><small>${mobileText('manualReceipts')}</small></article>
+        <article><span>${mobileText('consumedRevenue')}</span><strong>${formatFinanceCny(ledgerTotals.recognizedRevenueCnyMinor)}</strong><small>${mobileText('consumedHint')}</small></article>
+        <article><span>${mobileText('upstreamActualCost')}</span><strong>${formatFinanceCny(ledgerTotals.upstreamActualCostCnyMinor)}</strong><small>${mobileText('automaticImageCost')}</small></article>
+        <article><span>${mobileText('otherExpenses')}</span><strong>${formatFinanceCny(ledgerTotals.otherExpensesCnyMinor)}</strong><small>${mobileText('manualExpenses')}</small></article>
+        <article class="profit"><span>${mobileText('operatingProfit')}</span><strong>${formatFinanceCny(ledgerTotals.operatingProfitCnyMinor)}</strong><small>${mobileText('profitFormula')}</small></article>
+        <article><span>${mobileText('upstreamTopups')}</span><strong>${formatFinanceCny(ledgerTotals.upstreamTopupsCnyMinor)}</strong><small>${mobileText('upstreamCashPaid')}</small></article>
+        <article class="profit"><span>${mobileText('netCashFlow')}</span><strong>${formatFinanceCny(ledgerTotals.netCashFlowCnyMinor)}</strong><small>${mobileText('cashFlowFormula')}</small></article>
       </div>
       <div class="mobile-finance-toolbar">
-        <div><button type="button" data-finance-filter="all" class="${state.mobileFinanceFilter === 'all' ? 'active' : ''}">全部</button><button type="button" data-finance-filter="income" class="${state.mobileFinanceFilter === 'income' ? 'active' : ''}">收入</button><button type="button" data-finance-filter="expense" class="${state.mobileFinanceFilter === 'expense' ? 'active' : ''}">支出</button></div>
-        ${canAddEntry ? '<button type="button" id="mobileFinanceAdd">记一笔</button>' : '<span class="mobile-finance-select-hint">暂无可记账的业务</span>'}
+        <div><button type="button" data-finance-filter="all" class="${state.mobileFinanceFilter === 'all' ? 'active' : ''}">${mobileText('all')}</button><button type="button" data-finance-filter="income" class="${state.mobileFinanceFilter === 'income' ? 'active' : ''}">${mobileText('income')}</button><button type="button" data-finance-filter="expense" class="${state.mobileFinanceFilter === 'expense' ? 'active' : ''}">${mobileText('expense')}</button></div>
+        ${canAddEntry ? `<button type="button" id="mobileFinanceAdd">${mobileText('addEntry')}</button>` : `<span class="mobile-finance-select-hint">${mobileText('noEditableBusiness')}</span>`}
       </div>
-      <div class="mobile-finance-list-head"><h3>账本明细</h3><button type="button" id="mobileFinanceExport">导出 CSV</button></div>
+      <div class="mobile-finance-list-head"><h3>${mobileText('ledgerDetails')}</h3><button type="button" id="mobileFinanceExport">${mobileText('exportCsv')}</button></div>
       <div class="mobile-finance-list">${entryHtml}</div>
-      <p class="mobile-finance-cost-note">已消费收入和上游实际成本由系统自动核算；客户到账、上游充值和其他费用采用手工登记。</p>
+      <p class="mobile-finance-cost-note">${mobileText('accountingNote')}</p>
     </section>`;
 }
 
@@ -745,40 +867,40 @@ function openMobileFinanceDialog(entry = null) {
   const availableBusinesses = (state.mobileBusinessHub?.businesses || []).filter(
     item => item.available && ['yongsha', 'duoxiluka'].includes(item.id)
   );
-  if (!availableBusinesses.length) return toast('暂无可记账的业务', true);
+  if (!availableBusinesses.length) return toast(mobileText('noEditableBusiness'), true);
   const fixedBusinessId = entry?.businessId
     || (['yongsha', 'duoxiluka'].includes(state.mobileFinanceBusinessId) ? state.mobileFinanceBusinessId : '');
   const initialBusinessId = fixedBusinessId || availableBusinesses[0].id;
   const selectedCategory = entry?.category === 'other_income' ? 'client_payment' : (entry?.category || 'client_payment');
-  const businessName = editing ? mobileBusinessDisplayName(initialBusinessId) : '经营账本';
+  const businessName = editing ? mobileBusinessLocalizedName(initialBusinessId) : mobileText('ledgerTitle');
   const businessField = editing
-    ? `<label><span>计入业务</span><input value="${escapeHtml(mobileBusinessDisplayName(initialBusinessId))}" disabled></label>`
-    : `<label><span>计入业务</span><select data-finance-business>${availableBusinesses.map(item => `<option value="${escapeHtml(item.id)}"${item.id === initialBusinessId ? ' selected' : ''}>${escapeHtml(mobileBusinessDisplayName(item.id, item.name))}</option>`).join('')}</select></label>`;
+    ? `<label><span>${mobileText('includedBusiness')}</span><input value="${escapeHtml(mobileBusinessLocalizedName(initialBusinessId))}" disabled></label>`
+    : `<label><span>${mobileText('includedBusiness')}</span><select data-finance-business>${availableBusinesses.map(item => `<option value="${escapeHtml(item.id)}"${item.id === initialBusinessId ? ' selected' : ''}>${escapeHtml(mobileBusinessLocalizedName(item.id, item.name))}</option>`).join('')}</select></label>`;
   const element = document.createElement('div');
   element.className = 'mobile-finance-modal-backdrop';
   element.innerHTML = `<section class="mobile-finance-modal" role="dialog" aria-modal="true" aria-labelledby="mobileFinanceDialogTitle">
-    <header><div><span>${escapeHtml(businessName)}</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑账目' : '登记账目'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
+    <header><div><span>${escapeHtml(businessName)}</span><h2 id="mobileFinanceDialogTitle">${editing ? mobileText('editEntry') : mobileText('registerEntry')}</h2></div><button type="button" data-finance-close aria-label="${mobileText('close')}">×</button></header>
     <div class="mobile-finance-form">
       ${businessField}
-      <label><span>账目类型</span><select data-finance-category><option value="client_payment"${selectedCategory === 'client_payment' ? ' selected' : ''}>客户到账</option><option value="gateway_topup"${selectedCategory === 'gateway_topup' ? ' selected' : ''}>上游充值</option><option value="other_expense"${selectedCategory === 'other_expense' ? ' selected' : ''}>其他费用</option></select></label>
-      <label><span>日期</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
-      <label><span>金额（CNY）</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.amountCnyMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
-      <label class="wide"><span>对方或用途</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="例如：客户名称、上游名称或费用用途"></label>
-      <label class="wide"><span>备注</span><textarea data-finance-note rows="3" maxlength="500" placeholder="可选">${escapeHtml(entry?.note || '')}</textarea></label>
+      <label><span>${mobileText('ledgerType')}</span><select data-finance-category><option value="client_payment"${selectedCategory === 'client_payment' ? ' selected' : ''}>${mobileText('customerReceipts')}</option><option value="gateway_topup"${selectedCategory === 'gateway_topup' ? ' selected' : ''}>${mobileText('upstreamTopups')}</option><option value="other_expense"${selectedCategory === 'other_expense' ? ' selected' : ''}>${mobileText('otherExpenses')}</option></select></label>
+      <label><span>${mobileText('date')}</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
+      <label><span>${mobileText('amountCny')}</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.amountCnyMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
+      <label class="wide"><span>${mobileText('counterparty')}</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="${mobileText('counterpartyPlaceholder')}"></label>
+      <label class="wide"><span>${mobileText('note')}</span><textarea data-finance-note rows="3" maxlength="500" placeholder="${mobileText('optional')}">${escapeHtml(entry?.note || '')}</textarea></label>
     </div>
-    <footer>${editing ? '<button class="danger" type="button" data-finance-delete>删除</button>' : '<span></span>'}<div><button class="secondary" type="button" data-finance-close>取消</button><button class="primary" type="button" data-finance-save>保存</button></div></footer>
+    <footer>${editing ? `<button class="danger" type="button" data-finance-delete>${mobileText('delete')}</button>` : '<span></span>'}<div><button class="secondary" type="button" data-finance-close>${mobileText('cancel')}</button><button class="primary" type="button" data-finance-save>${mobileText('save')}</button></div></footer>
   </section>`;
   document.body.appendChild(element);
   const close = () => element.remove();
   element.addEventListener('click', async event => {
     if (event.target === element || event.target.closest('[data-finance-close]')) return close();
     if (event.target.closest('[data-finance-delete]')) {
-      if (!window.confirm('确定删除这条账目记录吗？')) return;
+      if (!window.confirm(mobileText('confirmDelete'))) return;
       try {
         await window.caishen.saveBusinessFinanceEntry({ businessId: initialBusinessId, action: 'delete', id: entry.id });
         close();
         await loadMobileFinanceLedger();
-        toast('账目记录已删除');
+        toast(mobileText('deleted'));
       } catch (error) { toast(errorText(error), true); }
       return;
     }
@@ -787,7 +909,7 @@ function openMobileFinanceDialog(entry = null) {
     const businessId = editing
       ? initialBusinessId
       : element.querySelector('[data-finance-business]')?.value;
-    if (!['yongsha', 'duoxiluka'].includes(businessId)) return toast('请选择账目计入的业务', true);
+    if (!['yongsha', 'duoxiluka'].includes(businessId)) return toast(mobileText('chooseBusiness'), true);
     const payload = {
       date: element.querySelector('[data-finance-date]').value,
       category: element.querySelector('[data-finance-category]').value,
@@ -808,7 +930,7 @@ function openMobileFinanceDialog(entry = null) {
       });
       close();
       await loadMobileFinanceLedger();
-      toast(editing ? '账目记录已更新' : '账目记录已添加');
+      toast(editing ? mobileText('updated') : mobileText('added'));
     } catch (error) {
       saveButton.disabled = false;
       toast(errorText(error), true);
@@ -979,10 +1101,11 @@ function renderLegacyMobileStats() {
 }
 
 function renderMobileStats() {
+  renderMobileStatsChrome();
   const container = $('#mobileStatsContent');
   if (!container) return;
   if (state.mobileFinanceLoading && !state.mobileBusinessHub) {
-    container.innerHTML = '<div class="mobile-stats-loading">正在读取经营数据…</div>';
+    container.innerHTML = `<div class="mobile-stats-loading">${escapeHtml(mobileText('loadingAnalytics'))}</div>`;
     return;
   }
   if (state.mobileFinanceError && !state.mobileBusinessHub) {
@@ -991,21 +1114,21 @@ function renderMobileStats() {
   }
   const hub = state.mobileBusinessHub;
   if (!hub) {
-    container.innerHTML = '<div class="mobile-stats-loading">暂无经营数据</div>';
+    container.innerHTML = `<div class="mobile-stats-loading">${escapeHtml(mobileText('noAnalytics'))}</div>`;
     return;
   }
   const ranges = [
-    { key: 'today', label: '今天' },
-    { key: 'yesterday', label: '昨天' },
-    { key: '7d', label: '近 7 天' },
-    { key: 'month', label: '本月' },
-    { key: 'last_month', label: '上月' },
-    { key: 'year', label: '本年' },
-    { key: 'last_year', label: '上年' }
+    { key: 'today', label: mobileText('today') },
+    { key: 'yesterday', label: mobileText('yesterday') },
+    { key: '7d', label: mobileText('sevenDays') },
+    { key: 'month', label: mobileText('thisMonth') },
+    { key: 'last_month', label: mobileText('lastMonth') },
+    { key: 'year', label: mobileText('thisYear') },
+    { key: 'last_year', label: mobileText('lastYear') }
   ];
   const businesses = (hub.businesses || []).map(item => ({
     ...item,
-    displayName: mobileBusinessDisplayName(item.id, item.name)
+    displayName: mobileBusinessLocalizedName(item.id, item.name)
   }));
   const availableBusinesses = businesses.filter(item => item.available && item.accounting);
   const selectedBusiness = state.mobileFinanceBusinessId === 'all'
@@ -1019,50 +1142,50 @@ function renderMobileStats() {
   const balanceBreakdown = state.mobileFinanceBusinessId === 'all'
     ? availableBusinesses.map(item => {
       const balance = mobileFinanceLedgerTotals(item.accounting).balanceUsdMinor;
-      return `${mobileBusinessDisplayName(item.id, item.name)} ${formatMobileStatsMoney(balance)}`;
+      return `${mobileBusinessLocalizedName(item.id, item.name)} ${formatMobileStatsMoney(balance)}`;
     }).join(' · ')
-    : `${mobileBusinessDisplayName(selectedBusiness?.id, selectedBusiness?.name)}团队当前余额`;
+    : state.mobileStatsLanguage === 'zh'
+      ? `${mobileBusinessLocalizedName(selectedBusiness?.id, selectedBusiness?.name)}团队当前余额`
+      : `${mobileBusinessLocalizedName(selectedBusiness?.id, selectedBusiness?.name)} team balance`;
   const upstreamBalances = Array.isArray(hub.upstreamBalances) ? hub.upstreamBalances : [];
   const upstreamBalanceHtml = upstreamBalances.length ? upstreamBalances.map(item => {
     const ok = item.status === 'ok' && Number.isFinite(Number(item.balance));
     const amount = ok
       ? `${item.currency === 'CNY' ? '¥' : item.currency === 'USD' ? '$' : ''}${Number(item.balance).toFixed(2)}${item.currency === 'TOKENS' ? ' tokens' : ''}`
-      : '暂不可用';
+      : mobileText('unavailable');
     const low = ok && item.currency === 'USD' && Number(item.balance) < 20;
     return `<article class="mobile-upstream-balance-card${ok ? '' : ' unavailable'}${low ? ' low' : ''}">
-      <div><span>${escapeHtml(item.relayName || '中转站')}</span><small>${escapeHtml(item.message || '已读取上游余额')}</small></div>
+      <div><span>${escapeHtml(item.relayName || mobileText('relayFallback'))}</span><small>${escapeHtml(mobileUpstreamStatusMessage(item))}</small></div>
       <strong>${escapeHtml(amount)}</strong>
     </article>`;
-  }).join('') : '<div class="mobile-upstream-balance-empty">暂无中转站余额配置</div>';
+  }).join('') : `<div class="mobile-upstream-balance-empty">${escapeHtml(mobileText('noRelayBalance'))}</div>`;
   const selectedRange = ranges.find(item => item.key === state.mobileFinanceRange) || ranges[0];
   state.mobileAccounting = accounting;
   state.mobileFinanceData = accounting.finance;
   const updatedNode = $('#mobileStatsUpdatedAt');
   if (updatedNode) updatedNode.textContent = state.mobileStatsUpdatedAt
-    ? `更新于 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}`
-    : '数据已同步';
+    ? `${mobileText('updatedAt')} ${formatLocalDateTime(state.mobileStatsUpdatedAt)}`
+    : mobileText('synced');
   container.innerHTML = `
     <section class="mobile-ledger-filter-card">
-      <label for="mobileFinanceBusiness"><span>业务</span><select id="mobileFinanceBusiness"><option value="all">全部业务</option>${businesses.map(item => `<option value="${escapeHtml(item.id)}"${item.id === state.mobileFinanceBusinessId ? ' selected' : ''}${item.available ? '' : ' disabled'}>${escapeHtml(item.displayName)}${item.available ? '' : '（未连接）'}</option>`).join('')}</select></label>
-      <span class="mobile-ledger-filter-label">时间</span>
+      <label for="mobileFinanceBusiness"><span>${mobileText('currentBusiness')}</span><select id="mobileFinanceBusiness"><option value="all">${mobileText('allBusinesses')}</option>${businesses.map(item => `<option value="${escapeHtml(item.id)}"${item.id === state.mobileFinanceBusinessId ? ' selected' : ''}${item.available ? '' : ' disabled'}>${escapeHtml(item.displayName)}${item.available ? '' : ` (${mobileText('disconnected')})`}</option>`).join('')}</select></label>
       <nav class="mobile-stats-range-switch" aria-label="选择统计时间">
         ${ranges.map(item => `<button type="button" data-mobile-stats-range="${item.key}" class="${item.key === selectedRange.key ? 'active' : ''}">${escapeHtml(item.label)}</button>`).join('')}
       </nav>
     </section>
     <section class="mobile-ledger-balance-card">
-      <div><span>团队当前可用余额</span><strong>${formatMobileStatsMoney(ledgerTotals.balanceUsdMinor)}</strong><p>${escapeHtml(balanceBreakdown || '暂无可用业务余额')}</p></div>
-      <b>${formatInteger(requestCount)} 次请求</b>
+      <div><span>${mobileText('teamBalance')}</span><strong>${formatMobileStatsMoney(ledgerTotals.balanceUsdMinor)}</strong><p>${escapeHtml(balanceBreakdown || mobileText('noBusinessBalance'))}</p></div>
+      <b>${formatInteger(requestCount)} ${mobileText('requests')}</b>
     </section>
     <section class="mobile-ledger-primary-metrics">
-      <article><span>已消费收入</span><strong class="expense">${formatMobileStatsMoney(ledgerTotals.consumptionUsdMinor)}</strong><small>客户已实际使用的额度</small></article>
-      <article><span>API 请求</span><strong>${formatInteger(requestCount)}</strong><small>${escapeHtml(selectedRange.label)}内</small></article>
+      <article><span>${mobileText('consumedRevenue')}</span><strong class="expense">${formatMobileStatsMoney(ledgerTotals.consumptionUsdMinor)}</strong><small>${mobileText('consumedHint')}</small></article>
+      <article><span>${mobileText('apiRequests')}</span><strong>${formatInteger(requestCount)}</strong><small>${escapeHtml(selectedRange.label)}${mobileText('withinRange')}</small></article>
     </section>
-    <section class="mobile-upstream-balance-panel">
-      <header><div><span>上游保障</span><h2>中转站真实余额</h2></div><small>低于 $20 标红</small></header>
+    <button class="mobile-finance-more" id="mobileFinanceMore" type="button" aria-expanded="${state.mobileFinanceExpanded}">${state.mobileFinanceExpanded ? mobileText('collapseLedger') : mobileText('more')}</button>
+    ${state.mobileFinanceExpanded ? `<div class="mobile-finance-expanded-content"><section class="mobile-upstream-balance-panel">
+      <header><div><span>${mobileText('upstreamGuard')}</span><h2>${mobileText('realRelayBalance')}</h2></div><small>${mobileText('lowBalanceHint')}</small></header>
       <div class="mobile-upstream-balance-list">${upstreamBalanceHtml}</div>
-    </section>
-    <button class="mobile-finance-more" id="mobileFinanceMore" type="button" aria-expanded="${state.mobileFinanceExpanded}">${state.mobileFinanceExpanded ? '收起账本' : 'More'}</button>
-    ${mobileFinancePanelHtml()}`;
+    </section>${mobileFinancePanelHtml()}</div>` : ''}`;
   const financeBusiness = $('#mobileFinanceBusiness');
   if (financeBusiness) financeBusiness.onchange = () => {
     state.mobileFinanceBusinessId = financeBusiness.value || 'all';

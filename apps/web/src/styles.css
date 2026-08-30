@@ -6221,6 +6221,26 @@ label input, label textarea {
   box-shadow: 0 10px 24px rgba(16, 27, 43, .08);
 }
 
+.mobile-stats-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mobile-stats-language-button {
+  min-width: 44px;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid rgba(47, 124, 116, .22);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--navy);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(16, 27, 43, .08);
+}
+
 .mobile-stats-content {
   display: grid;
   gap: 14px;
@@ -8133,6 +8153,15 @@ label input, label textarea {
   box-shadow: 0 12px 30px rgba(16, 27, 43, .07);
 }
 
+.mobile-finance-expanded-content {
+  display: grid;
+  gap: 12px;
+}
+
+.mobile-finance-expanded-content .mobile-upstream-balance-panel {
+  margin: 0;
+}
+
 .mobile-finance-panel {
   overflow: hidden;
   border: 1px solid rgba(47, 124, 116, .2);
@@ -8865,4 +8894,61 @@ label input, label textarea {
   .alipay-qr-frame { height: min(340px, 55vh); }
   .alipay-history-row { align-items: flex-start; flex-direction: column; }
   .alipay-history-row strong { text-align: left; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-shell.mobile-stats-mode main { background: #08100e; }
+  .mobile-stats-page {
+    --navy: #edf8f3;
+    --muted: #91a59c;
+    --teal: #62d8b2;
+    --danger: #ff8d84;
+    background:
+      radial-gradient(circle at 92% 3%, rgba(98, 216, 178, .13), transparent 25%),
+      linear-gradient(180deg, #0c1512 0%, #08100e 100%);
+    color: #edf8f3;
+  }
+  .mobile-stats-header h1 { color: #edf8f3; }
+  .mobile-stats-icon-button,
+  .mobile-stats-language-button,
+  .mobile-ledger-filter-card,
+  .mobile-ledger-primary-metrics article,
+  .mobile-upstream-balance-panel,
+  .mobile-finance-more,
+  .mobile-finance-panel {
+    border-color: rgba(192, 235, 219, .11);
+    background: #121e1a;
+    color: #edf8f3;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, .24);
+  }
+  .mobile-ledger-filter-card select,
+  .mobile-ledger-filter-card .mobile-stats-range-switch,
+  .mobile-upstream-balance-card,
+  .mobile-finance-kpis article,
+  .mobile-finance-toolbar > div {
+    border-color: rgba(192, 235, 219, .11);
+    background: #172620;
+    color: #edf8f3;
+  }
+  .mobile-ledger-filter-card .mobile-stats-range-switch button.active,
+  .mobile-finance-toolbar button.active,
+  #mobileFinanceAdd {
+    background: #62d8b2;
+    color: #052019;
+  }
+  .mobile-ledger-balance-card {
+    background: linear-gradient(145deg, #258c74, #145c4d);
+    box-shadow: 0 18px 38px rgba(20, 92, 77, .34);
+  }
+  .mobile-ledger-primary-metrics strong,
+  .mobile-upstream-balance-panel > header h2,
+  .mobile-upstream-balance-card span,
+  .mobile-finance-kpis strong,
+  .mobile-finance-list-head h3,
+  .mobile-finance-entry-copy b { color: #edf8f3; }
+  .mobile-finance-entry,
+  .mobile-finance-list-head { border-color: rgba(192, 235, 219, .11); }
+  .mobile-finance-entry-icon { background: #1b2b25; }
+  .mobile-upstream-balance-card.low { background: rgba(183, 79, 73, .17); }
+  .mobile-upstream-balance-card.unavailable { background: rgba(180, 109, 20, .17); }
 }
