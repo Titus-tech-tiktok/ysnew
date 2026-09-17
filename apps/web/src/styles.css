@@ -3527,6 +3527,283 @@ label input, label textarea {
   min-height: 0;
 }
 
+.free-source-zone {
+  align-content: stretch;
+  justify-items: stretch;
+  padding: 12px;
+}
+
+.free-source-head, .taobao-result-head, .taobao-result-card > div:last-child {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  display: flex;
+}
+
+.free-source-head > div, .taobao-result-head > div {
+  min-width: 0;
+}
+
+.free-source-head b, .free-source-head span, .taobao-result-head b, .taobao-result-head span {
+  display: block;
+}
+
+.free-source-head span, .taobao-result-head span {
+  color: var(--subtle);
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.free-source-head button {
+  min-height: 34px;
+  padding-inline: 11px;
+}
+
+.free-source-grid {
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  display: grid;
+  overflow: auto;
+}
+
+.free-source-card {
+  background: #ecebe5;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  min-width: 0;
+  padding: 4px;
+  position: relative;
+}
+
+.free-source-card > span, .taobao-result-image > span, .taobao-result-error > span {
+  color: white;
+  background: #0f6f65;
+  border-radius: 999px;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  font-size: 10px;
+  display: grid;
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 1;
+}
+
+.free-source-card img {
+  border-radius: 6px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  width: 100%;
+}
+
+.free-source-card > div {
+  gap: 3px;
+  margin-top: 4px;
+  display: flex;
+}
+
+.free-source-card button {
+  color: var(--subtle);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  flex: 1;
+  min-width: 0;
+  min-height: 24px;
+  cursor: pointer;
+}
+
+.free-source-card button:last-child {
+  color: #a84438;
+}
+
+.taobao-source-preview {
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  display: grid;
+}
+
+.taobao-source-preview img {
+  min-height: 0;
+}
+
+.taobao-main-workspace {
+  grid-template-columns: minmax(390px, 480px) minmax(560px, 1fr);
+  gap: 16px;
+  height: calc(100vh - 40px);
+  min-height: 680px;
+  display: grid;
+}
+
+.taobao-main-controls {
+  grid-template-rows: 220px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+  display: grid;
+}
+
+.taobao-prompt-sheet {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.taobao-prompt-head {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  display: flex;
+}
+
+.taobao-prompt-head b, .taobao-prompt-head span {
+  display: block;
+}
+
+.taobao-prompt-head span {
+  color: var(--subtle);
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.taobao-prompt-list {
+  gap: 10px;
+  margin: 14px 0;
+  display: grid;
+}
+
+.taobao-prompt-card {
+  background: #f7f6f1;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px;
+}
+
+.taobao-prompt-card > span {
+  color: var(--ink);
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  display: block;
+}
+
+.taobao-prompt-card textarea {
+  background: var(--paper);
+  min-height: 82px;
+  resize: vertical;
+}
+
+.taobao-result-sheet {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.taobao-result-grid {
+  gap: 12px;
+  margin-top: 14px;
+  display: grid;
+}
+
+.taobao-result-grid > .empty-state {
+  min-height: 420px;
+}
+
+.taobao-result-group {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.taobao-result-group-head {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  display: flex;
+}
+
+.taobao-result-group-head b {
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taobao-result-group-head span {
+  color: var(--subtle);
+  flex: none;
+  font-size: 11px;
+}
+
+.taobao-result-grid-inner {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  display: grid;
+}
+
+.taobao-result-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.taobao-result-image, .taobao-result-error {
+  background: #ecebe5;
+  border-radius: 7px;
+  aspect-ratio: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.taobao-result-image img {
+  object-fit: contain;
+  width: 100%;
+  height: 100%;
+}
+
+.taobao-result-card > div:last-child {
+  align-items: stretch;
+  margin-top: 8px;
+}
+
+.taobao-result-card > div:last-child b {
+  align-self: center;
+  font-size: 12px;
+}
+
+.taobao-result-card button {
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: 11px;
+}
+
+.taobao-result-error {
+  color: #a84438;
+  place-content: center;
+  padding: 18px;
+  text-align: center;
+  display: grid;
+}
+
+.taobao-result-error small {
+  color: var(--subtle);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
 .free-controls .drop-zone .empty-state {
   min-height: 145px;
 }
@@ -3538,6 +3815,206 @@ label input, label textarea {
 
 .free-controls .prompt-sheet > .primary {
   margin-top: 14px;
+}
+
+.task-card-workspace {
+  gap: 16px;
+  height: calc(100vh - 40px);
+  min-height: 620px;
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+}
+
+#page-free .task-card-workspace {
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+}
+
+.task-card-side-panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+  display: grid;
+  overflow: auto;
+}
+
+.task-card-side-panel b, .task-card-side-panel span, .task-card-side-panel small {
+  display: block;
+}
+
+.task-card-side-panel span, .task-card-side-panel small {
+  color: var(--subtle);
+  line-height: 1.55;
+}
+
+.task-card-side-panel span {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.task-card-side-panel small {
+  font-size: 11px;
+}
+
+.task-card-toolbar {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  display: flex;
+}
+
+.task-card-toolbar b, .task-card-toolbar span {
+  display: block;
+}
+
+.task-card-toolbar span {
+  color: var(--subtle);
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.task-card-toolbar > div:last-child {
+  flex: none;
+  gap: 10px;
+  display: flex;
+}
+
+.task-card-prompt-panel {
+  max-height: none;
+  margin-top: 6px;
+}
+
+.task-card-list {
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  padding-right: 4px;
+}
+
+.generation-task-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  gap: 14px;
+  padding: 16px;
+  display: grid;
+}
+
+.generation-task-card.failed {
+  border-color: rgba(168, 68, 56, .35);
+  background: rgba(168, 68, 56, .04);
+}
+
+.generation-task-head {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  display: flex;
+}
+
+.generation-task-select {
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  display: flex;
+}
+
+.generation-task-select input {
+  margin-top: 3px;
+}
+
+.generation-task-select span {
+  min-width: 0;
+}
+
+.generation-task-head b, .generation-task-head span, .generation-task-head small {
+  display: block;
+}
+
+.generation-task-head small {
+  color: var(--subtle);
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.danger-text {
+  color: #a84438;
+}
+
+.task-card-image-grid {
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 10px;
+  display: grid;
+}
+
+.task-card-image {
+  background: #ecebe5;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px;
+  position: relative;
+}
+
+.task-card-image > span {
+  color: white;
+  background: #0f6f65;
+  border-radius: 999px;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  font-size: 10px;
+  display: grid;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+}
+
+.task-card-image img {
+  background: white;
+  border-radius: 7px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  width: 100%;
+}
+
+.task-card-image div {
+  gap: 6px;
+  margin-top: 6px;
+  display: flex;
+}
+
+.task-card-image button {
+  color: var(--subtle);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  flex: 1;
+  min-height: 28px;
+  cursor: pointer;
+}
+
+.task-card-image button:last-child {
+  color: #a84438;
+}
+
+.generation-task-actions {
+  justify-content: flex-start;
+  display: flex;
+}
+
+.task-card-empty {
+  min-height: 360px;
 }
 
 .drop-zone, .result-zone {
@@ -5272,7 +5749,7 @@ label input, label textarea {
 }
 
 @media (width <= 900px) {
-  .task-layout, .task-layout.template-print-mode, .review-layout, .free-layout, .prompt-settings-layout, .taobao-publish-layout {
+  .task-layout, .task-layout.template-print-mode, .review-layout, .free-layout, .taobao-main-workspace, .prompt-settings-layout, .taobao-publish-layout {
     grid-template-columns: 1fr;
     grid-template-areas:
       "tasks"
@@ -5413,6 +5890,25 @@ label input, label textarea {
   .api-model-list {
     grid-template-columns: 1fr;
   }
+
+  .taobao-main-workspace {
+    height: auto;
+    min-height: 0;
+  }
+
+  .task-card-workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .taobao-main-controls {
+    grid-template-rows: 260px auto;
+  }
+
+  .taobao-result-grid-inner {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (width <= 640px) {
@@ -5477,6 +5973,14 @@ label input, label textarea {
 
   input, textarea, select {
     font-size: 16px;
+  }
+
+  .taobao-result-grid-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .task-card-image-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   label, .path-line, .asset-size-row, .asset-size-row label, .title-library-sheet > p, .sheet-description, .audit-section > p, .title-summary, .library-status, .prompt-note, .settings-foot {

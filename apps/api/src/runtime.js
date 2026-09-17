@@ -1220,7 +1220,7 @@ async function imageAsAnalysisDataUrl(file) {
 
 function shouldUsePowerShellApiFallback(url, error) {
   return process.platform === 'win32'
-    && /change2pro\.com/i.test(String(url || ''))
+    && /^https:\/\//i.test(String(url || ''))
     && /fetch failed|ECONNRESET|socket|network/i.test(`${error?.message || ''} ${error?.cause?.code || ''}`);
 }
 
@@ -3084,21 +3084,296 @@ async function resetConfig() {
 }
 
 async function generateFree(payload = {}, options = {}) {
-  if (!payload.sourcePath || !fs.existsSync(payload.sourcePath)) throw new Error('请选择源图片');
+  const sourcePaths = [...new Set((Array.isArray(payload.sourcePaths) && payload.sourcePaths.length
+    ? payload.sourcePaths
+    : [payload.sourcePath]).map(String).filter(file => file && fs.existsSync(file)))].slice(0, 10);
+  if (!sourcePaths.length) throw new Error('请至少选择一张参考图片');
   if (!String(payload.prompt || '').trim()) throw new Error('请输入生图提示词');
   const config = await loadConfig();
-  const folder = path.join(config.outputPath || currentDefaultOutputRoot(), '自由生图');
+  const startedAt = new Date().toISOString();
+  const folder = await nextTaskFolder(config);
+  const templateFolder = path.join(folder, '.caishen-inputs', '自由生图参考');
+  const relativePath = '自由生图.png';
+  const templatePath = await createReferenceContactSheet(sourcePaths, path.join(templateFolder, relativePath));
   await fsp.mkdir(folder, { recursive: true });
-  const outputPath = path.join(folder, `自由生图_${localFileTimestamp()}.png`);
-  await fsp.writeFile(outputPath, await generateImage(String(payload.prompt).trim(), [payload.sourcePath], {
-    size: config.imageSize || '1024x1024',
-    quality: config.imageQuality || 'auto',
-    billingDescription: '自由生图',
-    billingReference: path.basename(payload.sourcePath),
-    billingOnceKey: billingOnceKey('image:free', payload.sourcePath, String(payload.prompt).trim(), Date.now(), crypto.randomUUID()),
-    signal: options.signal
-  }));
-  return { outputPath, url: imageUrl(outputPath) };
+  const outputPath = path.join(folder, relativePath);
+  await writeReviewReadySource(folder, templateFolder, [relativePath], {
+    generationMode: 'free_image',
+    note: String(payload.prompt || '').trim(),
+    reason: '自由生图任务生成结果，等待人工确认。',
+    startedAt,
+    phase: 'generating',
+    current: 0,
+    percent: 5,
+    message: '自由生图任务已创建，正在生成。'
+  });
+  options.reportProgress?.({ phase: 'generating', current: 0, total: 1, percent: 5, message: '正在生成自由生图任务' });
+  try {
+    await fsp.writeFile(outputPath, await generateImage(String(payload.prompt).trim(), sourcePaths, {
+      size: config.imageSize || '1024x1024',
+      quality: config.imageQuality || 'auto',
+      billingDescription: '自由生图',
+      billingReference: sourcePaths.map(file => path.basename(file)).join(' + '),
+      billingOnceKey: billingOnceKey('image:free', sourcePaths.join('|'), String(payload.prompt).trim(), Date.now(), crypto.randomUUID()),
+      signal: options.signal
+    }));
+  } catch (error) {
+    await writeGenerationProgress(folder, {
+      phase: 'failed',
+      current: 0,
+      total: 1,
+      percent: 100,
+      message: String(error?.message || '自由生图生成失败').slice(0, 300)
+    }).catch(() => {});
+    await writeJsonFile(metadataPaths(folder).generationErrors, {
+      updated_at: new Date().toISOString(),
+      count: 1,
+      failures: [`${relativePath}: ${String(error?.message || '生成失败').slice(0, 300)}`]
+    }).catch(() => {});
+    await addOperationLog(folder, `自由生图生成失败：${String(error?.message || '生成失败').slice(0, 120)}`).catch(() => {});
+    throw error;
+  }
+  await writeGenerationProgress(folder, {
+    phase: 'completed',
+    current: 1,
+    total: 1,
+    percent: 100,
+    message: '自由生图生成完成，已进入人工筛图。'
+  });
+  await addOperationLog(folder, '自由生图生成完成，已进入人工筛图。');
+  options.reportProgress?.({ phase: 'completed', current: 1, total: 1, percent: 100, message: '已生成 1/1 张' });
+  return { folder, outputPath, url: imageUrl(outputPath), reviewFolder: folder, templatePath };
+}
+
+const TAOBAO_MAIN_IMAGE_ROLES = Object.freeze([
+  { id: 'clean', title: '第 1 张主图', fileName: '01-淘宝主图.png', direction: '围绕产品自行设计一张清爽、高级、适合淘宝首屏的商品主图。背景、光影、构图和少量道具可自由发挥。' },
+  { id: 'scene', title: '第 2 张主图', fileName: '02-淘宝主图.png', direction: '围绕产品自行设计一张有生活感或使用场景感的商品主图。允许更换环境氛围，让画面更有代入感。' },
+  { id: 'selling-point', title: '第 3 张主图', fileName: '03-淘宝主图.png', direction: '围绕产品自行设计一张突出视觉卖点的商品主图。可以通过构图、光影、留白或简洁图形强化点击吸引力。' },
+  { id: 'detail', title: '第 4 张主图', fileName: '04-淘宝主图.png', direction: '围绕产品自行设计一张强调质感、材质或细节氛围的商品主图。画面可以更接近特写或半场景。' },
+  { id: 'campaign', title: '第 5 张主图', fileName: '05-淘宝主图.png', direction: '围绕产品自行设计一张更有营销氛围的商品主图。允许更大胆的配色、背景和电商感构图。' }
+]);
+
+function taobaoMainPrompt(role, editablePrompt = '') {
+  return [
+    '你正在制作一套淘宝商品主图。输入图片中的产品是唯一产品身份基准。',
+    '必须准确保持产品的型号、外形结构、尺寸比例、颜色、材质、零部件数量与位置，不得换款、增减结构或改变品牌标识。',
+    '输出一张 1:1 正方形、高质量、可直接用于电商展示的图片，不要拼图、不要多宫格、不要水印。',
+    `本张主图要求：${editablePrompt || role.direction}`
+  ].filter(Boolean).join('\n');
+}
+
+function safeBasename(file) {
+  const name = path.basename(file, path.extname(file)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+  return (name || 'product').slice(0, 60);
+}
+
+async function createReferenceContactSheet(sourcePaths, outputPath) {
+  const paths = sourcePaths.filter(file => file && fs.existsSync(file)).slice(0, 10);
+  if (!paths.length) throw new Error('请至少选择一张参考图片');
+  const columns = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(paths.length))));
+  const rows = Math.ceil(paths.length / columns);
+  const tile = 520;
+  const gap = 24;
+  const width = columns * tile + (columns + 1) * gap;
+  const height = rows * tile + (rows + 1) * gap;
+  const composites = [];
+  for (let index = 0; index < paths.length; index += 1) {
+    const input = await sharp(paths[index], { failOn: 'none', animated: false, limitInputPixels: 120_000_000 })
+      .rotate()
+      .resize({ width: tile, height: tile, fit: 'inside', withoutEnlargement: true, background: '#ffffff' })
+      .flatten({ background: '#ffffff' })
+      .png()
+      .toBuffer();
+    composites.push({
+      input,
+      left: gap + (index % columns) * (tile + gap),
+      top: gap + Math.floor(index / columns) * (tile + gap)
+    });
+  }
+  await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+  await sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: '#f7f6f1'
+    }
+  }).composite(composites).png().toFile(outputPath);
+  return outputPath;
+}
+
+async function writeReviewReadySource(folder, templateFolderPath, relativePaths, options = {}) {
+  await writeTaskSource(folder, {
+    productPath: options.productPath || '',
+    printPath: options.printPath || '',
+    masterImagePath: '',
+    masterReferencePath: '',
+    templateFolderPath,
+    templateRelativePaths: relativePaths,
+    generationMode: options.generationMode || 'free_image',
+    taskNumber: options.taskNumber || 0,
+    note: options.note || ''
+  }, options.generationMode || 'free_image');
+  for (const relativePath of relativePaths) {
+    const templateImagePath = path.join(templateFolderPath, relativePath);
+    await writeTemplateAnalysisCache({
+      templateRoot: templateFolderPath,
+      templateImagePath,
+      relativeTemplatePath: relativePath,
+      analysis: createManualTemplateAnalysis({
+        action: 'replace_print',
+        reason: options.reason || '自由生图任务生成结果，等待人工确认。',
+        replaceArea: '整张参考图',
+        forbiddenArea: ''
+      }),
+      manualOverride: true
+    }).catch(() => {});
+  }
+  await writeJsonFile(metadataPaths(folder).generationProgress, {
+    phase: options.phase || 'completed',
+    current: Number.isFinite(Number(options.current)) ? Number(options.current) : relativePaths.length,
+    total: relativePaths.length,
+    percent: Number.isFinite(Number(options.percent)) ? Number(options.percent) : 100,
+    message: options.message || '生成完成，等待人工筛图',
+    startedAt: options.startedAt || new Date().toISOString(),
+    completedAt: options.phase && options.phase !== 'completed' ? '' : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+  await addOperationLog(folder, options.message || '生成完成，进入人工筛图。');
+}
+
+async function writeGenerationProgress(folder, patch = {}) {
+  const file = metadataPaths(folder).generationProgress;
+  const current = await readJsonFile(file, {});
+  const next = {
+    ...(current && typeof current === 'object' ? current : {}),
+    ...(patch || {}),
+    updatedAt: new Date().toISOString()
+  };
+  await writeJsonFile(file, next);
+  return next;
+}
+
+async function generateTaobaoMainImages(payload = {}, options = {}) {
+  const sourcePaths = [...new Set((Array.isArray(payload.sourcePaths) && payload.sourcePaths.length
+    ? payload.sourcePaths
+    : [payload.sourcePath]).map(String).filter(file => file && fs.existsSync(file)))].slice(0, 30);
+  if (!sourcePaths.length) throw new Error('请至少选择一张产品图');
+  const config = await loadConfig();
+  const startedAt = new Date().toISOString();
+  const folder = await nextTaskFolder(config);
+  const templateFolder = path.join(folder, '.caishen-inputs', '一键生成主图产品图');
+  await fsp.mkdir(folder, { recursive: true });
+  const editablePrompts = Array.isArray(payload.prompts) ? payload.prompts.map(value => String(value || '').trim()).slice(0, 5) : [];
+  const sharedPrompt = String(payload.prompt || '').trim();
+  const total = sourcePaths.length * TAOBAO_MAIN_IMAGE_ROLES.length;
+  let completed = 0;
+  const groups = [];
+  const taskSpecs = [];
+  for (const [sourceIndex, sourcePath] of sourcePaths.entries()) {
+    const sourceName = safeBasename(sourcePath);
+    const sourcePrefix = `${String(sourceIndex + 1).padStart(2, '0')}-${sourceName}`;
+    for (const [roleIndex, role] of TAOBAO_MAIN_IMAGE_ROLES.entries()) {
+      const relativePath = sourcePaths.length === 1
+        ? role.fileName
+        : path.join(sourcePrefix, role.fileName);
+      const templatePath = path.join(templateFolder, relativePath);
+      await fsp.mkdir(path.dirname(templatePath), { recursive: true });
+      await fsp.copyFile(sourcePath, templatePath);
+      taskSpecs.push({ sourceIndex, sourcePath, roleIndex, role, relativePath });
+    }
+  }
+  const relativePaths = taskSpecs.map(spec => spec.relativePath);
+  await writeReviewReadySource(folder, templateFolder, relativePaths, {
+    generationMode: 'taobao_main_images',
+    reason: '一键生成主图任务生成结果，等待人工确认。',
+    startedAt,
+    phase: 'generating',
+    current: 0,
+    percent: 3,
+    message: `一键生成主图任务已创建，等待生成 ${total} 张。`
+  });
+  for (const [sourceIndex, sourcePath] of sourcePaths.entries()) {
+    if (options.signal?.aborted) throw new Error('任务已停止');
+    const specs = taskSpecs.filter(spec => spec.sourceIndex === sourceIndex);
+    const jobs = specs.map(async spec => {
+      const { role, roleIndex: index, relativePath } = spec;
+      const outputPath = path.join(folder, relativePath);
+      await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+      try {
+        const employeePrompt = editablePrompts[index] || [role.direction, sharedPrompt].filter(Boolean).join('\n');
+        const bytes = await generateImage(taobaoMainPrompt(role, employeePrompt), [sourcePath], {
+          size: config.imageSize || '1024x1024',
+          quality: config.imageQuality || 'auto',
+          billingDescription: `淘宝五图-${role.title}`,
+          billingReference: path.basename(sourcePath),
+          billingOnceKey: billingOnceKey('image:taobao-main', sourcePath, role.id, Date.now(), crypto.randomUUID()),
+          signal: options.signal
+        });
+        await fsp.writeFile(outputPath, bytes);
+        return { id: role.id, title: role.title, relativePath, status: 'completed', outputPath, url: imageUrl(outputPath) };
+      } catch (error) {
+        if (options.signal?.aborted) throw error;
+        return { id: role.id, title: role.title, relativePath, status: 'failed', error: String(error?.message || '生成失败').slice(0, 300) };
+      } finally {
+        completed += 1;
+        await writeGenerationProgress(folder, {
+          phase: 'generating',
+          current: completed,
+          total,
+          percent: Math.max(3, Math.min(99, Math.round(completed / Math.max(1, total) * 100))),
+          message: `正在生成一键主图：已完成 ${completed}/${total} 张`
+        }).catch(() => {});
+        options.reportProgress?.({ phase: 'generating', current: completed, total, message: `已完成 ${completed}/${total} 张` });
+      }
+    });
+    const results = await Promise.all(jobs);
+    groups.push({
+      sourcePath,
+      sourceName: path.basename(sourcePath),
+      folder,
+      results,
+      successful: results.filter(item => item.status === 'completed').length,
+      failed: results.filter(item => item.status !== 'completed').length
+    });
+  }
+  const results = groups.flatMap(group => group.results.map(item => ({ ...item, sourcePath: group.sourcePath, sourceName: group.sourceName })));
+  const successful = results.filter(item => item.status === 'completed').length;
+  if (!successful) {
+    const message = results.find(item => item.error)?.error || '淘宝主图生成失败';
+    await writeGenerationProgress(folder, {
+      phase: 'failed',
+      current: completed,
+      total,
+      percent: 100,
+      message
+    }).catch(() => {});
+    await writeJsonFile(metadataPaths(folder).generationErrors, {
+      updated_at: new Date().toISOString(),
+      count: results.filter(item => item.status !== 'completed').length,
+      failures: results.filter(item => item.status !== 'completed').map(item => `${item.title}: ${item.error || '生成失败'}`)
+    }).catch(() => {});
+    await addOperationLog(folder, `一键生成主图失败：${String(message).slice(0, 120)}`).catch(() => {});
+    throw new Error(message);
+  }
+  await writeGenerationProgress(folder, {
+    phase: successful === results.length ? 'completed' : 'completed_with_errors',
+    current: results.length,
+    total: results.length,
+    percent: 100,
+    message: `一键生成主图完成：成功生成 ${successful}/${results.length} 张。`
+  });
+  const failedResults = results.filter(item => item.status !== 'completed');
+  if (failedResults.length) {
+    await writeJsonFile(metadataPaths(folder).generationErrors, {
+      updated_at: new Date().toISOString(),
+      count: failedResults.length,
+      failures: failedResults.map(item => `${item.relativePath || item.title}: ${item.error || '生成失败'}`)
+    }).catch(() => {});
+  }
+  await addOperationLog(folder, `一键生成主图完成：成功生成 ${successful}/${results.length} 张。`);
+  options.reportProgress?.({ phase: successful === results.length ? 'completed' : 'completed_with_errors', current: results.length, total: results.length, message: `成功生成 ${successful}/${results.length} 张` });
+  return { folder, reviewFolder: folder, groups, results, successful, failed: results.length - successful };
 }
 
 async function initializeRuntime() {
@@ -3129,6 +3404,7 @@ const runtimeExports = {
   fileFromToken,
   fileToken,
   generateFree,
+  generateTaobaoMainImages,
   generateTask,
   generateTemplateTaskMaster,
   generateTemplateSetForFolder,

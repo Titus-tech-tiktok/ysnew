@@ -37,9 +37,10 @@
         <button class="nav-item active" data-index="02" data-icon="图" data-page="tasks" title="素材生图">素材生图</button>
         <button class="nav-item" data-index="03" data-icon="筛" data-page="review" title="人工筛图">人工筛图</button>
         <button class="nav-item" data-index="04" data-icon="生" data-page="free" title="自由生图">自由生图</button>
+        <button class="nav-item" data-index="05" data-icon="图" data-page="taobao-main" title="一键生成主图">一键生成主图</button>
         <div class="nav-divider" aria-hidden="true"><span>管理设置</span></div>
-        <button class="nav-item" id="promptSettingsNav" data-index="05" data-icon="词" data-page="prompts" title="提示词设置">提示词设置</button>
-        <button class="nav-item" data-index="06" data-icon="设" data-page="settings" title="系统设置">系统设置</button>
+        <button class="nav-item" id="promptSettingsNav" data-index="06" data-icon="词" data-page="prompts" title="提示词设置">提示词设置</button>
+        <button class="nav-item" data-index="07" data-icon="设" data-page="settings" title="系统设置">系统设置</button>
       </nav>
       <div class="sidebar-finance">
         <button class="sidebar-balance" id="openBillingDetailButton" type="button"><span>算力余额</span><b id="currentBalance">读取中…</b><small id="currentBillingHint">点击查看费用明细</small></button>
@@ -116,10 +117,27 @@
       </section>
 
       <section class="page" id="page-free" aria-label="自由生图">
-        <div class="free-layout">
-          <div class="free-controls"><article class="drop-zone" id="freeSource"><div class="empty-state"><b>选择一张源图片</b><span>支持 JPG、PNG、WebP、BMP</span><button class="secondary" id="chooseFreeImageButton">选择图片</button></div></article>
-          <article class="prompt-sheet"><label>提示词<textarea id="freePrompt" rows="12" placeholder="输入生图提示词"></textarea></label><button class="primary full" id="freeGenerateButton">开始生成</button></article></div>
-          <article class="result-zone result-with-action"><div id="freeResult"><div class="empty-state"><b>等待生成</b><span>完成后可下载结果图片。</span></div></div><button class="secondary result-download" id="revealFreeResultButton" disabled>下载结果图片</button></article>
+        <div class="task-card-workspace">
+          <aside class="task-card-side-panel">
+            <div><b>自由生图任务</b><span>每张任务卡可放多张参考图，生成后统一进入人工筛图。</span></div>
+            <button class="secondary full" id="addFreeTaskButton">新增任务</button>
+            <button class="primary full" id="freeGenerateButton">生成选中任务</button>
+            <small id="freeTaskSelectionHint">勾选右侧任务卡后批量生成。</small>
+          </aside>
+          <div class="task-card-list" id="freeTaskList"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-taobao-main" aria-label="一键生成主图">
+        <div class="task-card-workspace">
+          <aside class="task-card-side-panel">
+            <div><b>一键生成主图</b><span>每张产品图是一张任务卡，每张图生成 5 张主图，结果进入人工筛图。</span></div>
+            <button class="secondary full" id="addTaobaoTaskButton">导入产品图</button>
+            <button class="primary full" id="taobaoGenerateButton">生成选中任务</button>
+            <small id="taobaoTaskSelectionHint">勾选右侧产品图任务卡后批量生成。</small>
+            <article class="taobao-prompt-sheet task-card-prompt-panel"><div class="taobao-prompt-head"><div><b>5 张主图提示词</b><span>普通员工可直接修改。</span></div><button class="text-button" id="resetTaobaoPromptsButton" type="button">恢复默认</button></div><div class="taobao-prompt-list" id="taobaoPromptList"></div></article>
+          </aside>
+          <div class="task-card-list" id="taobaoTaskList"></div>
         </div>
       </section>
 

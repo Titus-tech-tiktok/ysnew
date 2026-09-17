@@ -99,7 +99,9 @@ async function createRuntimeFixture(t, workspaceId) {
   });
   const sourcePath = path.join(temp, 'source.png');
   await fs.writeFile(sourcePath, imageBytes);
-  return { runtime, captured, sourcePath };
+  const secondSourcePath = path.join(temp, 'second-source.png');
+  await fs.writeFile(secondSourcePath, imageBytes);
+  return { runtime, captured, sourcePath, secondSourcePath };
 }
 
 test('relay generation keeps the user image prompt and bills repeated requests independently', { concurrency: false }, async (t) => {
@@ -123,4 +125,43 @@ test('relay generation does not replace the user image prompt', { concurrency: f
 
   await runtime.generateFree({ sourcePath, prompt: 'ORIGINAL USER IMAGE PROMPT' });
   assert.match(captured.imageBodies[0], /ORIGINAL USER IMAGE PROMPT/);
+});
+
+test('free generation sends multiple reference images in their selected order', { concurrency: false }, async (t) => {
+  const { runtime, captured, sourcePath, secondSourcePath } = await createRuntimeFixture(t, 'multi-reference-free-generation');
+  await runtime.generateFree({ sourcePaths: [sourcePath, secondSourcePath], prompt: 'COMBINE BOTH REFERENCES' });
+  assert.equal(captured.imageBodies.length, 1);
+  assert.match(captured.imageBodies[0], /COMBINE BOTH REFERENCES/);
+  assert.match(captured.imageBodies[0], /name="image\[\]"; filename="source\.(?:jpg|png)"/);
+  assert.match(captured.imageBodies[0], /name="image\[\]"; filename="second-source\.(?:jpg|png)"/);
+  assert.ok(captured.imageBodies[0].indexOf('filename="source.') < captured.imageBodies[0].indexOf('filename="second-source.'));
+});
+
+test('taobao main image batch creates five separately downloadable images', { concurrency: false }, async (t) => {
+  const { runtime, captured, sourcePath } = await createRuntimeFixture(t, 'taobao-five-main-images');
+  const progress = [];
+  const prompts = ['员工提示词一', '员工提示词二', '员工提示词三', '员工提示词四', '员工提示词五'];
+  const result = await runtime.generateTaobaoMainImages({ sourcePath, prompts }, {
+    reportProgress: item => progress.push(item)
+  });
+  assert.equal(captured.imageBodies.length, 5);
+  assert.equal(result.successful, 5);
+  assert.equal(result.failed, 0);
+  assert.equal(result.results.length, 5);
+  assert.ok(result.results.every(item => item.status === 'completed' && item.outputPath && item.url));
+  assert.deepEqual(prompts.map(prompt => captured.imageBodies.some(body => body.includes(prompt))), [true, true, true, true, true]);
+  assert.ok(captured.imageBodies.every(body => body.includes('必须准确保持产品')));
+  assert.ok(progress.some(item => item.current === 5 && item.total === 5));
+});
+
+test('taobao main image batch accepts multiple product images', { concurrency: false }, async (t) => {
+  const { runtime, captured, sourcePath, secondSourcePath } = await createRuntimeFixture(t, 'taobao-multi-product-images');
+  const prompts = ['开放提示一', '开放提示二', '开放提示三', '开放提示四', '开放提示五'];
+  const result = await runtime.generateTaobaoMainImages({ sourcePaths: [sourcePath, secondSourcePath], prompts });
+  assert.equal(captured.imageBodies.length, 10);
+  assert.equal(result.groups.length, 2);
+  assert.equal(result.results.length, 10);
+  assert.equal(result.successful, 10);
+  assert.ok(result.groups.every(group => group.successful === 5 && group.folder));
+  assert.ok(captured.imageBodies.some(body => body.includes('开放提示一')));
 });

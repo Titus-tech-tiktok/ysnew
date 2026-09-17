@@ -5,6 +5,16 @@ const REVIEW_VIEWED_STORAGE_KEY = 'caishen-web-viewed-review-jobs-v1';
 const REVIEW_REGENERATION_RECORDS_STORAGE_KEY = 'caishen-web-review-regeneration-records-v1';
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'caishen-web-sidebar-collapsed-v1';
 const MOBILE_STATS_LANGUAGE_STORAGE_KEY = 'caishen-web-mobile-stats-language-v1';
+const TAOBAO_PROMPTS_STORAGE_KEY = 'caishen-web-taobao-main-prompts-v1';
+const TAOBAO_PROMPT_DEFAULTS = Object.freeze([
+  { title: '第 1 张 · 开放主图', value: '基于产品图自由设计一张适合淘宝首屏的商品主图。可以自行发挥背景、光影、构图和少量道具，让画面高级、清爽、有点击欲。' },
+  { title: '第 2 张 · 开放主图', value: '基于产品图自由设计一张不同风格的淘宝商品主图。可以偏场景、氛围或生活方式表达，让产品看起来更有使用感。' },
+  { title: '第 3 张 · 开放主图', value: '基于产品图自由设计一张有视觉重点的淘宝商品主图。可以通过角度、留白、色彩或简洁图形强化卖点和第一眼吸引力。' },
+  { title: '第 4 张 · 开放主图', value: '基于产品图自由设计一张强调质感的淘宝商品主图。可以更关注材质、细节、光泽、纹理或局部氛围，整体仍适合电商展示。' },
+  { title: '第 5 张 · 开放主图', value: '基于产品图自由设计一张更有营销感的淘宝商品主图。可以大胆一些处理背景、色彩和氛围，但产品主体需要清晰好看。' }
+]);
+const FREE_TASK_MAX_IMAGES = 10;
+const TAOBAO_TASK_MAX_ITEMS = 30;
 const ASSET_PAGE_SIZE = 100;
 let storageScope = 'anonymous';
 const scopedStorageKey = key => `${key}:${storageScope}`;
@@ -111,6 +121,18 @@ function loadMobileStatsLanguage() {
   try { return localStorage.getItem(MOBILE_STATS_LANGUAGE_STORAGE_KEY) === 'en' ? 'en' : 'zh'; } catch { return 'zh'; }
 }
 
+function loadStoredTaobaoPrompts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(scopedStorageKey(TAOBAO_PROMPTS_STORAGE_KEY)) || '[]');
+    if (Array.isArray(saved) && saved.length === 5 && saved.every(value => typeof value === 'string')) return saved;
+  } catch {}
+  return TAOBAO_PROMPT_DEFAULTS.map(item => item.value);
+}
+
+function persistTaobaoPrompts() {
+  try { localStorage.setItem(scopedStorageKey(TAOBAO_PROMPTS_STORAGE_KEY), JSON.stringify(state.taobaoPrompts)); } catch {}
+}
+
 const state = {
   currentUser: null,
   teamUsers: [],
@@ -181,8 +203,9 @@ const state = {
   reviewRegenerationJobIds: new Map(),
   selectedReviewFolders: new Set(),
   reviewRegenerationDialog: null,
-  freeSource: null,
-  freeResult: null,
+  freeTasks: [],
+  taobaoTasks: [],
+  taobaoPrompts: TAOBAO_PROMPT_DEFAULTS.map(item => item.value),
   promptSettings: null,
   activePromptId: '',
   freePromptDefaultApplied: false,
@@ -278,6 +301,7 @@ function applyCurrentUser(user) {
   state.viewedReviewJobs = loadViewedReviewJobs();
   state.reviewRegenerationRecords = loadReviewRegenerationRecords();
   state.assetPreviewSizes = loadStoredAssetPreviewSizes();
+  state.taobaoPrompts = loadStoredTaobaoPrompts();
   $('#currentUserName').textContent = user.displayName || user.username;
   $('#currentUserName').title = `${user.username} · ${roleLabel(user.role)}`;
   $('#promptSettingsNav').hidden = !canViewPrompts();
@@ -4249,30 +4273,219 @@ function renderReviewStage() {
   });
 }
 
-async function chooseFreeImage() {
+function newFreeTask(images = []) {
+  const prompt = state.promptSettings?.prompts?.find(item => item.id === 'freeImageDefault')?.value || '';
+  return { id: createClientId(), sources: images, prompt, selected: true, status: '待生成', progress: '', jobId: '' };
+}
+
+function newTaobaoTask(image) {
+  return { id: createClientId(), source: image, selected: true, status: '待生成', progress: '', jobId: '' };
+}
+
+async function addFreeTask() {
+  const images = await window.caishen.chooseImages(FREE_TASK_MAX_IMAGES);
+  if (!images?.length) return;
+  state.freeTasks.push(newFreeTask(images.slice(0, FREE_TASK_MAX_IMAGES)));
+  renderFreeTasks();
+}
+
+async function addFreeTaskImages(taskId) {
+  const task = state.freeTasks.find(item => item.id === taskId);
+  if (!task) return;
+  if (task.sources.length >= FREE_TASK_MAX_IMAGES) return toast(`每个任务最多 ${FREE_TASK_MAX_IMAGES} 张参考图`, true);
+  const images = await window.caishen.chooseImages(FREE_TASK_MAX_IMAGES - task.sources.length);
+  if (!images?.length) return;
+  const known = new Set(task.sources.map(item => item.path));
+  for (const image of images) {
+    if (!known.has(image.path) && task.sources.length < FREE_TASK_MAX_IMAGES) task.sources.push(image);
+  }
+  renderFreeTasks();
+}
+
+async function replaceFreeTaskImage(taskId, imageIndex) {
+  const task = state.freeTasks.find(item => item.id === taskId);
+  if (!task) return;
   const image = await window.caishen.chooseImage();
   if (!image) return;
-  state.freeSource = image;
-  $('#freeSource').innerHTML = `<img src="${image.url}" alt="源图片">`;
+  task.sources[imageIndex] = image;
+  renderFreeTasks();
+}
+
+function taskImageGrid(images, taskId, kind) {
+  return `<div class="task-card-image-grid">${images.map((image, index) => `<article class="task-card-image"><span>${index + 1}</span><img src="${escapeHtml(image.url)}" alt="任务图片 ${index + 1}"><div><button type="button" data-${kind}-image-replace="${taskId}:${index}">更换</button><button type="button" data-${kind}-image-remove="${taskId}:${index}">删除</button></div></article>`).join('')}</div>`;
+}
+
+function renderFreeTasks() {
+  const target = $('#freeTaskList');
+  if (!state.freeTasks.length) {
+    target.innerHTML = '<div class="empty-state task-card-empty"><b>还没有自由生图任务</b><span>新增任务后，每张卡片可放多张参考图和独立提示词。</span><button class="secondary" data-free-task-add>新增任务</button></div>';
+    return;
+  }
+  target.innerHTML = state.freeTasks.map((task, index) => `<article class="generation-task-card ${task.status === '生成失败' ? 'failed' : ''}" data-free-task="${task.id}"><div class="generation-task-head"><label class="generation-task-select"><input type="checkbox" data-free-task-select="${task.id}"${task.selected !== false ? ' checked' : ''}><span><b>自由生图任务 ${index + 1}</b><small>${escapeHtml(task.status)}${task.progress ? ` · ${escapeHtml(task.progress)}` : ''}</small></span></label><button class="text-button danger-text" data-free-task-remove="${task.id}">删除任务</button></div>${taskImageGrid(task.sources, task.id, 'free')}<div class="generation-task-actions"><button class="secondary" data-free-task-image-add="${task.id}">增加图片</button></div><label>提示词<textarea rows="5" data-free-task-prompt="${task.id}" placeholder="输入这个任务的生成要求">${escapeHtml(task.prompt || '')}</textarea></label></article>`).join('');
+}
+
+function handleFreeTaskListClick(event) {
+  if (event.target.closest('[data-free-task-add]')) return addFreeTask();
+  const removeTask = event.target.closest('[data-free-task-remove]');
+  if (removeTask) {
+    state.freeTasks = state.freeTasks.filter(task => task.id !== removeTask.dataset.freeTaskRemove);
+    return renderFreeTasks();
+  }
+  const addImage = event.target.closest('[data-free-task-image-add]');
+  if (addImage) return addFreeTaskImages(addImage.dataset.freeTaskImageAdd);
+  const replace = event.target.closest('[data-free-image-replace]');
+  if (replace) {
+    const [taskId, index] = String(replace.dataset.freeImageReplace || '').split(':');
+    return replaceFreeTaskImage(taskId, Number(index));
+  }
+  const removeImage = event.target.closest('[data-free-image-remove]');
+  if (removeImage) {
+    const [taskId, index] = String(removeImage.dataset.freeImageRemove || '').split(':');
+    const task = state.freeTasks.find(item => item.id === taskId);
+    if (task) {
+      task.sources.splice(Number(index), 1);
+      renderFreeTasks();
+    }
+  }
 }
 
 async function generateFree() {
-  if (!state.freeSource) return toast('请先选择源图片', true);
-  const prompt = $('#freePrompt').value.trim();
-  if (!prompt) return toast('请输入修改要求', true);
-  $('#freeGenerateButton').disabled = true;
-  $('#freeResult').innerHTML = '<div class="empty-state"><b>正在生成</b><span>请保持页面打开。</span></div>';
+  const selectedTasks = state.freeTasks.filter(task => task.selected !== false && !['已提交', '生成中', '已进入人工筛图'].includes(task.status));
+  if (!selectedTasks.length) return toast('请先勾选要生成的自由生图任务', true);
+  const invalid = selectedTasks.find(task => !task.sources.length || !String(task.prompt || '').trim());
+  if (invalid) return toast('每个自由生图任务都需要图片和提示词', true);
+  const button = $('#freeGenerateButton');
+  button.disabled = true;
   try {
-    state.freeResult = await window.caishen.generateFree({ sourcePath: state.freeSource.path, prompt });
-    $('#freeResult').innerHTML = `<img src="${state.freeResult.url}" alt="生成结果">`;
-    $('#freeResult img').onclick = () => window.caishen.revealFile(state.freeResult.outputPath);
-    $('#revealFreeResultButton').disabled = false;
-    toast('自由生图完成，点击结果即可下载');
+    let submitted = 0;
+    for (const task of selectedTasks) {
+      try {
+        const job = await window.caishen.submitFreeGeneration({
+          sourcePaths: task.sources.map(image => image.path),
+          prompt: task.prompt
+        });
+        submitted += 1;
+        task.jobId = job.id || '';
+        task.status = '已提交';
+        task.progress = '已提交后台生成，可在人工筛图查看状态';
+      } catch (error) {
+        task.status = '生成失败';
+        task.progress = errorText(error);
+      }
+      renderFreeTasks();
+    }
+    await sleep(900);
+    await loadReviews({ silent: true });
+    setPage('review');
+    toast(`已提交 ${submitted}/${selectedTasks.length} 个自由生图任务，请在人工筛图查看状态`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function addTaobaoTasks() {
+  if (state.taobaoTasks.length >= TAOBAO_TASK_MAX_ITEMS) return toast(`最多添加 ${TAOBAO_TASK_MAX_ITEMS} 张产品图`, true);
+  const images = await window.caishen.chooseImages(TAOBAO_TASK_MAX_ITEMS - state.taobaoTasks.length);
+  if (!images?.length) return;
+  const known = new Set(state.taobaoTasks.map(item => item.source?.path));
+  for (const image of images) {
+    if (!known.has(image.path) && state.taobaoTasks.length < TAOBAO_TASK_MAX_ITEMS) state.taobaoTasks.push(newTaobaoTask(image));
+  }
+  renderTaobaoTasks();
+}
+
+async function replaceTaobaoTaskImage(taskId) {
+  const task = state.taobaoTasks.find(item => item.id === taskId);
+  if (!task) return;
+  const image = await window.caishen.chooseImage();
+  if (!image) return;
+  task.source = image;
+  renderTaobaoTasks();
+}
+
+function renderTaobaoTasks() {
+  const target = $('#taobaoTaskList');
+  if (!state.taobaoTasks.length) {
+    target.innerHTML = '<div class="empty-state task-card-empty"><b>还没有主图任务</b><span>导入多张产品图后，每张产品图会成为一张任务卡。</span><button class="secondary" data-taobao-task-add>导入产品图</button></div>';
+    return;
+  }
+  target.innerHTML = state.taobaoTasks.map((task, index) => `<article class="generation-task-card ${task.status === '生成失败' ? 'failed' : ''}" data-taobao-task="${task.id}"><div class="generation-task-head"><label class="generation-task-select"><input type="checkbox" data-taobao-task-select="${task.id}"${task.selected !== false ? ' checked' : ''}><span><b>主图任务 ${index + 1}</b><small>${escapeHtml(task.status)}${task.progress ? ` · ${escapeHtml(task.progress)}` : ''}</small></span></label><button class="text-button danger-text" data-taobao-task-remove="${task.id}">删除任务</button></div>${taskImageGrid(task.source ? [task.source] : [], task.id, 'taobao')}<div class="generation-task-actions"><button class="secondary" data-taobao-image-replace="${task.id}:0">更换产品图</button></div></article>`).join('');
+}
+
+function handleTaobaoTaskListClick(event) {
+  if (event.target.closest('[data-taobao-task-add]')) return addTaobaoTasks();
+  const removeTask = event.target.closest('[data-taobao-task-remove]');
+  if (removeTask) {
+    state.taobaoTasks = state.taobaoTasks.filter(task => task.id !== removeTask.dataset.taobaoTaskRemove);
+    return renderTaobaoTasks();
+  }
+  const replace = event.target.closest('[data-taobao-image-replace]');
+  if (replace) {
+    const [taskId] = String(replace.dataset.taobaoImageReplace || '').split(':');
+    return replaceTaobaoTaskImage(taskId);
+  }
+  const removeImage = event.target.closest('[data-taobao-image-remove]');
+  if (removeImage) {
+    const [taskId] = String(removeImage.dataset.taobaoImageRemove || '').split(':');
+    const task = state.taobaoTasks.find(item => item.id === taskId);
+    if (task) {
+      task.source = null;
+      renderTaobaoTasks();
+    }
+  }
+}
+
+function renderTaobaoPromptEditors() {
+  $('#taobaoPromptList').innerHTML = TAOBAO_PROMPT_DEFAULTS.map((item, index) => `<label class="taobao-prompt-card"><span>${escapeHtml(item.title)}</span><textarea rows="4" data-taobao-prompt="${index}" placeholder="输入第 ${index + 1} 张主图的提示词">${escapeHtml(state.taobaoPrompts[index] || '')}</textarea></label>`).join('');
+}
+
+function resetTaobaoPrompts() {
+  state.taobaoPrompts = TAOBAO_PROMPT_DEFAULTS.map(item => item.value);
+  persistTaobaoPrompts();
+  renderTaobaoPromptEditors();
+  toast('已恢复 5 张主图的默认提示词');
+}
+
+async function generateTaobaoMainImages() {
+  const selectedTasks = state.taobaoTasks.filter(task => task.selected !== false && !['已提交', '生成中', '已进入人工筛图'].includes(task.status));
+  if (!selectedTasks.length) return toast('请先勾选要生成的主图任务', true);
+  if (selectedTasks.some(task => !task.source?.path)) return toast('每个主图任务都需要产品图', true);
+  const prompts = state.taobaoPrompts.map(value => String(value || '').trim());
+  const emptyIndex = prompts.findIndex(value => !value);
+  if (emptyIndex >= 0) return toast(`请填写第 ${emptyIndex + 1} 张主图的提示词`, true);
+  const button = $('#taobaoGenerateButton');
+  button.disabled = true;
+  try {
+    let submitted = 0;
+    for (const task of selectedTasks) {
+      try {
+        const job = await window.caishen.submitTaobaoMainImages({
+          sourcePaths: [task.source.path],
+          prompts
+        });
+        submitted += 1;
+        task.jobId = job.id || '';
+        task.status = '已提交';
+        task.progress = '已提交后台生成，可在人工筛图查看状态';
+      } catch (error) {
+        task.status = '生成失败';
+        task.progress = errorText(error);
+      }
+      renderTaobaoTasks();
+    }
+    await sleep(900);
+    await loadReviews({ silent: true });
+    setPage('review');
+    toast(`已提交 ${submitted}/${selectedTasks.length} 个主图任务，请在人工筛图查看状态`);
   } catch (error) {
-    $('#freeResult').innerHTML = `<div class="empty-state"><b>生成失败</b><span>${escapeHtml(errorText(error))}</span></div>`;
+    selectedTasks.forEach(task => {
+      task.status = '生成失败';
+      task.progress = errorText(error);
+    });
+    renderTaobaoTasks();
     toast(errorText(error), true);
   } finally {
-    $('#freeGenerateButton').disabled = false;
+    button.disabled = false;
   }
 }
 
@@ -4645,7 +4858,10 @@ function renderPromptEditor() {
 function applyFreePromptDefault() {
   if (state.freePromptDefaultApplied || !state.promptSettings) return;
   const prompt = state.promptSettings.prompts.find(item => item.id === 'freeImageDefault');
-  if (prompt?.value && !$('#freePrompt').value) $('#freePrompt').value = prompt.value;
+  if (prompt?.value) {
+    state.freeTasks.filter(task => !String(task.prompt || '').trim()).forEach(task => { task.prompt = prompt.value; });
+    renderFreeTasks();
+  }
   state.freePromptDefaultApplied = true;
 }
 
@@ -4680,8 +4896,9 @@ function schedulePromptSave(prompt, value) {
   const previousValue = prompt.value;
   prompt.value = value;
   prompt.customized = true;
-  if (prompt.id === 'freeImageDefault' && (!$('#freePrompt').value || $('#freePrompt').value === previousValue)) {
-    $('#freePrompt').value = value;
+  if (prompt.id === 'freeImageDefault') {
+    state.freeTasks.filter(task => !String(task.prompt || '').trim() || task.prompt === previousValue).forEach(task => { task.prompt = value; });
+    renderFreeTasks();
   }
   $('#promptCharacterCount').textContent = `${value.length} 字`;
   $('#promptSaveStatus').className = 'saving';
@@ -5798,8 +6015,37 @@ function bindEvents() {
       toast(approved ? `已通过 ${approved}/${folders.length} 个可见任务` : '当前可见任务均缺图，未完成归档', approved === 0);
     } catch (error) { toast(errorText(error), true); }
   };
-  $('#chooseFreeImageButton').onclick = chooseFreeImage;
+  $('#addFreeTaskButton').onclick = addFreeTask;
+  $('#freeTaskList').onclick = handleFreeTaskListClick;
+  $('#freeTaskList').onchange = event => {
+    const input = event.target.closest('[data-free-task-select]');
+    if (!input) return;
+    const task = state.freeTasks.find(item => item.id === input.dataset.freeTaskSelect);
+    if (task) task.selected = input.checked;
+  };
+  $('#freeTaskList').oninput = event => {
+    const input = event.target.closest('[data-free-task-prompt]');
+    if (!input) return;
+    const task = state.freeTasks.find(item => item.id === input.dataset.freeTaskPrompt);
+    if (task) task.prompt = input.value;
+  };
   $('#freeGenerateButton').onclick = generateFree;
+  $('#addTaobaoTaskButton').onclick = addTaobaoTasks;
+  $('#taobaoTaskList').onclick = handleTaobaoTaskListClick;
+  $('#taobaoTaskList').onchange = event => {
+    const input = event.target.closest('[data-taobao-task-select]');
+    if (!input) return;
+    const task = state.taobaoTasks.find(item => item.id === input.dataset.taobaoTaskSelect);
+    if (task) task.selected = input.checked;
+  };
+  $('#taobaoGenerateButton').onclick = generateTaobaoMainImages;
+  $('#resetTaobaoPromptsButton').onclick = resetTaobaoPrompts;
+  $('#taobaoPromptList').oninput = event => {
+    const input = event.target.closest('[data-taobao-prompt]');
+    if (!input) return;
+    state.taobaoPrompts[Number(input.dataset.taobaoPrompt)] = input.value;
+    persistTaobaoPrompts();
+  };
   $('#saveSettingsButton').onclick = saveSettings;
   $('#resetSettingsButton').onclick = resetSettings;
   $('#openBillingDetailButton').onclick = openBillingDetail;
@@ -5892,7 +6138,6 @@ function bindEvents() {
   };
   $('#resetCurrentPromptButton').onclick = resetCurrentPrompt;
   $('#resetAllPromptsButton').onclick = resetAllPrompts;
-  $('#revealFreeResultButton').onclick = () => { if (state.freeResult) window.caishen.revealFile(state.freeResult.outputPath); };
   $$('.audit-button').forEach(button => button.onclick = async () => {
     const previous = state.config.auditMode;
     state.config.auditMode = button.dataset.audit;
@@ -6089,6 +6334,9 @@ async function start() {
   applyCurrentUser(authStatus.user);
   applySidebarCollapsed(loadSidebarCollapsed());
   bindEvents();
+  renderTaobaoPromptEditors();
+  renderFreeTasks();
+  renderTaobaoTasks();
   if (authStatus.user.passwordChangeRequired) {
     openChangePasswordModal();
     return;

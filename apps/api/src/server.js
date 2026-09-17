@@ -34,7 +34,7 @@ const assetRoot = () => path.join(runtime.WORKSPACE_ROOT, 'assets');
 const jobRoot = () => path.join(runtime.WORKSPACE_ROOT, 'jobs');
 const thumbnailRoot = () => path.join(runtime.WORKSPACE_ROOT, '.cache', 'thumbnails');
 const LONG_JOB_METHODS = new Set([
-  'prepareTemplates', 'generateFree', 'generateTask', 'generateTemplateMaster',
+  'prepareTemplates', 'generateFree', 'generateTaobaoMainImages', 'generateTask', 'generateTemplateMaster',
   'generateTemplates', 'regenerateTemplate'
 ]);
 const SUPERADMIN_RPC_METHODS = new Set([
@@ -517,7 +517,7 @@ async function readJob(id) {
 async function writeJob(job) {
   await fsp.mkdir(jobRoot(), { recursive: true });
   const file = jobFile(job.id);
-  const temporary = `${file}.${process.pid}.tmp`;
+  const temporary = `${file}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   await fsp.writeFile(temporary, JSON.stringify(job, null, 2));
   let lastError;
   for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -1008,7 +1008,24 @@ const rpc = {
   getTemplatePreparation: ([folder]) => runtime.getTemplatePreparation(workspacePath(folder)),
   prepareTemplates: ([folder]) => runtime.prepareTemplateFolder(workspacePath(folder)),
   saveTemplateRegions: ([payload]) => runtime.saveTemplateRegions({ ...(payload || {}), folder: workspacePath(payload?.folder) }),
-  generateFree: ([payload], context) => runtime.generateFree({ ...(payload || {}), sourcePath: workspacePath(payload?.sourcePath) }, context || {}),
+  generateFree: ([payload], context) => {
+    const requested = Array.isArray(payload?.sourcePaths) && payload.sourcePaths.length
+      ? payload.sourcePaths
+      : [payload?.sourcePath];
+    const sourcePaths = [...new Set(requested.filter(Boolean).map(value => workspacePath(value)))].slice(0, 10);
+    return runtime.generateFree({ ...(payload || {}), sourcePath: sourcePaths[0] || '', sourcePaths }, context || {});
+  },
+  generateTaobaoMainImages: ([payload], context) => {
+    const requested = Array.isArray(payload?.sourcePaths) && payload.sourcePaths.length
+      ? payload.sourcePaths
+      : [payload?.sourcePath];
+    const sourcePaths = [...new Set(requested.filter(Boolean).map(value => workspacePath(value)))].slice(0, 30);
+    return runtime.generateTaobaoMainImages({
+      ...(payload || {}),
+      sourcePath: sourcePaths[0] || '',
+      sourcePaths
+    }, context || {});
+  },
   listReviews: () => runtime.reviewFolders(),
   approveReview: ([folder]) => runtime.approveReviewFolder(managedPath(folder)),
   setReviewStatus: ([payload]) => runtime.setTemplateManualStatus({ ...(payload || {}), folder: managedPath(payload?.folder) }),
@@ -1850,6 +1867,26 @@ async function startServer() {
       const destination = path.join(assetRoot(), 'free', `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${extension}`);
       await moveUploadedFile(req.file.path, destination);
       return res.json({ path: destination, name: safeSegment(originalName), url: fileUrl(destination) });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/upload/images', upload.array('files', 30), async (req, res, next) => {
+    const saved = [];
+    try {
+      if (!req.files?.length) return res.status(400).json({ error: '没有收到图片' });
+      for (const file of req.files) {
+        const originalName = uploadName(file);
+        const extension = path.extname(originalName).toLowerCase();
+        if (!['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tif', '.tiff'].includes(extension)) {
+          await fsp.rm(file.path, { force: true });
+          continue;
+        }
+        const destination = path.join(assetRoot(), 'free', `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${extension}`);
+        await moveUploadedFile(file.path, destination);
+        saved.push({ path: destination, name: safeSegment(originalName), url: fileUrl(destination) });
+      }
+      if (!saved.length) return res.status(415).json({ error: '没有支持的图片格式' });
+      return res.json({ data: saved });
     } catch (error) { next(error); }
   });
 

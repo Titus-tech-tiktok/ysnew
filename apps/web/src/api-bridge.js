@@ -69,6 +69,19 @@ async function runJob(method, args = [], clientKey = '', onProgress = () => {}) 
   throw new Error('后台任务仍在执行，请稍后到对应页面刷新结果');
 }
 
+async function submitJob(method, args = [], clientKey = '') {
+  const response = await fetch('/api/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method, args, clientKey })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || `任务提交失败：HTTP ${response.status}`);
+  const jobId = body.data?.id;
+  if (!jobId) throw new Error('服务端没有返回任务编号');
+  return body.data;
+}
+
 async function cancelJob(jobId) {
   if (!jobId) return null;
   const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
@@ -267,6 +280,17 @@ async function uploadSingle(endpoint, accept) {
   return body;
 }
 
+async function uploadMultiple(endpoint, accept, maximum = 10) {
+  const files = (await pickFiles({ accept, multiple: true })).slice(0, maximum);
+  if (!files.length) return [];
+  const form = new FormData();
+  for (const file of files) form.append('files', file, file.name);
+  const response = await fetch(endpoint, { method: 'POST', body: form });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || `上传失败：HTTP ${response.status}`);
+  return Array.isArray(body) ? body : body.data || [];
+}
+
 function downloadFrom(url) {
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -420,6 +444,7 @@ window.caishen = {
     return uploadFolder(kind);
   },
   chooseImage: async () => uploadSingle('/api/upload/image', 'image/*'),
+  chooseImages: async (maximum = 10) => uploadMultiple('/api/upload/images', 'image/*', Math.max(1, Math.min(30, Number(maximum) || 10))),
   listImages: (root, query) => rpc('listImages', root, query),
   listTemplateFolders: () => rpc('listTemplateFolders'),
   deleteTemplateFolder: folder => rpc('deleteTemplateFolder', folder),
@@ -430,6 +455,9 @@ window.caishen = {
   prepareTemplates: folder => runJob('prepareTemplates', [folder]),
   saveTemplateRegions: payload => rpc('saveTemplateRegions', payload),
   generateFree: payload => runJob('generateFree', [payload]),
+  submitFreeGeneration: payload => submitJob('generateFree', [payload], `free:${Date.now()}:${createClientId()}`),
+  generateTaobaoMainImages: (payload, onProgress) => runJob('generateTaobaoMainImages', [payload], `taobao-main:${Date.now()}:${createClientId()}`, onProgress),
+  submitTaobaoMainImages: payload => submitJob('generateTaobaoMainImages', [payload], `taobao-main:${Date.now()}:${createClientId()}`),
   listReviews: () => rpc('listReviews'),
   approveReview: folder => rpc('approveReview', folder),
   setReviewStatus: payload => rpc('setReviewStatus', payload),
