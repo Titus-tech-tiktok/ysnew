@@ -3892,21 +3892,24 @@ label input, label textarea {
 }
 
 .task-card-list {
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 420px));
+  gap: 12px;
   min-height: 0;
   overflow: auto;
   display: grid;
   align-content: start;
+  align-items: start;
   padding-right: 4px;
 }
 
 .generation-task-card {
-  background: var(--paper);
+  background: #fdfcf9;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  gap: 14px;
-  padding: 16px;
+  border-radius: 10px;
+  gap: 11px;
+  padding: 12px;
   display: grid;
+  box-shadow: 0 10px 24px rgba(20, 29, 40, .04);
 }
 
 .generation-task-card.failed {
@@ -3917,34 +3920,53 @@ label input, label textarea {
 .generation-task-head {
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   display: flex;
 }
 
 .generation-task-select {
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   display: flex;
+  flex: 1;
 }
 
 .generation-task-select input {
-  margin-top: 3px;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--teal);
+  flex: none;
+  margin: 1px 0 0;
 }
 
 .generation-task-select span {
   min-width: 0;
+  flex: 1;
 }
 
 .generation-task-head b, .generation-task-head span, .generation-task-head small {
   display: block;
 }
 
+.generation-task-head b {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .generation-task-head small {
   color: var(--subtle);
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.45;
+}
+
+.generation-task-head .text-button {
+  flex: none;
+  min-height: 28px;
+  padding: 0 7px;
+  font-size: 11px;
 }
 
 .danger-text {
@@ -3952,16 +3974,16 @@ label input, label textarea {
 }
 
 .task-card-image-grid {
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
   display: grid;
 }
 
 .task-card-image {
   background: #ecebe5;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 6px;
+  border-radius: 9px;
+  padding: 5px;
   position: relative;
 }
 
@@ -3969,14 +3991,14 @@ label input, label textarea {
   color: white;
   background: #0f6f65;
   border-radius: 999px;
-  min-width: 22px;
-  height: 22px;
+  min-width: 20px;
+  height: 20px;
   place-items: center;
-  font-size: 10px;
+  font-size: 9px;
   display: grid;
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 8px;
+  left: 8px;
   z-index: 1;
 }
 
@@ -4000,7 +4022,9 @@ label input, label textarea {
   border: 1px solid var(--line);
   border-radius: 6px;
   flex: 1;
-  min-height: 28px;
+  min-height: 27px;
+  padding: 0 6px;
+  font-size: 11px;
   cursor: pointer;
 }
 
@@ -4011,6 +4035,23 @@ label input, label textarea {
 .generation-task-actions {
   justify-content: flex-start;
   display: flex;
+}
+
+.generation-task-actions .secondary {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.generation-task-card label:not(.generation-task-select) {
+  gap: 7px;
+  display: grid;
+}
+
+.generation-task-card textarea {
+  min-height: 108px;
+  resize: vertical;
+  background: var(--paper);
 }
 
 .task-card-empty {
