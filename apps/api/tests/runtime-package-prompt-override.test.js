@@ -137,8 +137,27 @@ test('free generation sends multiple reference images in their selected order', 
   assert.ok(captured.imageBodies[0].indexOf('filename="source.') < captured.imageBodies[0].indexOf('filename="second-source.'));
 });
 
+test('free generation review task can regenerate from review page', { concurrency: false }, async (t) => {
+  const { runtime, captured, sourcePath } = await createRuntimeFixture(t, 'free-review-regeneration');
+  await runtime.billing.saveRules({ enabled: true });
+  await runtime.billing.adjustBalance('free-review-regeneration', 'primary', 1000000);
+  const result = await runtime.generateFree({ sourcePath, prompt: 'FREE REVIEW ORIGINAL PROMPT' });
+  await runtime.regenerateSingleTemplate({
+    folder: result.folder,
+    relativePath: '自由生图.png',
+    extraInstruction: 'MAKE IT BRIGHTER'
+  });
+  assert.equal(captured.imageBodies.length, 2);
+  assert.match(captured.imageBodies[1], /FREE REVIEW ORIGINAL PROMPT/);
+  assert.match(captured.imageBodies[1], /MAKE IT BRIGHTER/);
+  const transactions = await runtime.billing.listTransactions('free-review-regeneration', 20);
+  assert.equal(transactions.filter(entry => entry.kind === 'image').length, 2);
+});
+
 test('taobao main image batch creates five separately downloadable images', { concurrency: false }, async (t) => {
   const { runtime, captured, sourcePath } = await createRuntimeFixture(t, 'taobao-five-main-images');
+  await runtime.billing.saveRules({ enabled: true });
+  await runtime.billing.adjustBalance('taobao-five-main-images', 'primary', 1000000);
   const progress = [];
   const prompts = ['员工提示词一', '员工提示词二', '员工提示词三', '员工提示词四', '员工提示词五'];
   const result = await runtime.generateTaobaoMainImages({ sourcePath, prompts }, {
@@ -152,6 +171,8 @@ test('taobao main image batch creates five separately downloadable images', { co
   assert.deepEqual(prompts.map(prompt => captured.imageBodies.some(body => body.includes(prompt))), [true, true, true, true, true]);
   assert.ok(captured.imageBodies.every(body => body.includes('必须准确保持产品')));
   assert.ok(progress.some(item => item.current === 5 && item.total === 5));
+  const transactions = await runtime.billing.listTransactions('taobao-five-main-images', 20);
+  assert.equal(transactions.filter(entry => entry.kind === 'image').length, 5);
 });
 
 test('taobao main image batch accepts multiple product images', { concurrency: false }, async (t) => {

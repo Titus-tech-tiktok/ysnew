@@ -333,6 +333,7 @@ function toWpfSourceMetadata(value) {
     TemplateRelativePaths: source.templateRelativePaths,
     GenerationMode: source.generationMode,
     TaskNumber: source.taskNumber,
+    Note: source.note,
     CreatedAt: source.createdAt
   };
 }

@@ -2495,6 +2495,126 @@ async function generateTemplateJob(job, source, config, options = {}) {
   return { action, outputPath: job.outputPath, billedMinor };
 }
 
+function taobaoMainRoleFromRelativePath(relativePath) {
+  const baseName = path.basename(String(relativePath || '')).toLowerCase();
+  const indexMatch = baseName.match(/^0?([1-5])(?:[-_.]|$)/);
+  const index = indexMatch ? Number(indexMatch[1]) - 1 : 0;
+  return TAOBAO_MAIN_IMAGE_ROLES[Math.max(0, Math.min(TAOBAO_MAIN_IMAGE_ROLES.length - 1, index))] || TAOBAO_MAIN_IMAGE_ROLES[0];
+}
+
+function simpleReviewPromptForJob(job, source, options = {}) {
+  const extraInstruction = String(options.extraInstruction || '').trim();
+  if (source.generationMode === 'taobao_main_images') {
+    const role = taobaoMainRoleFromRelativePath(job.relativePath);
+    const prompt = taobaoMainPrompt(role, role.direction);
+    return extraInstruction ? `${prompt}\n\n本次运营补充要求：${extraInstruction}` : prompt;
+  }
+  const basePrompt = String(source.note || '').trim() || '请根据参考图和用户要求重新生成一张高质量图片。';
+  return extraInstruction ? `${basePrompt}\n\n本次运营补充要求：${extraInstruction}` : basePrompt;
+}
+
+async function generateSimpleReviewJob(job, source, config, options = {}) {
+  if (!['free_image', 'taobao_main_images'].includes(source.generationMode)) throw new Error('不支持的重生任务类型');
+  if (!job.templatePath || !fs.existsSync(job.templatePath)) throw new Error(`原始参考图不存在：${job.relativePath}`);
+  const prompt = simpleReviewPromptForJob(job, source, options);
+  const imagePaths = [job.templatePath];
+  if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
+  let bytes = await generateImage(prompt, imagePaths, {
+    size: config.imageSize || '1024x1024',
+    quality: config.imageQuality || 'auto',
+    bulkGeneration: options.bulkGeneration === true,
+    billingDescription: source.generationMode === 'taobao_main_images' ? '一键主图重新生成' : '自由生图重新生成',
+    billingReference: job.relativePath,
+    billingOnceKey: billingOnceKey('image:simple-review-regenerate', source.generationMode, job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID()),
+    signal: options.signal,
+    onRequestState: options.onRequestState
+  });
+  await replaceOutputFile(job.outputPath, nextPath => fsp.writeFile(nextPath, bytes));
+  return { action: 'replace_print', outputPath: job.outputPath, billedMinor: Math.max(0, Number(bytes.billingAmountMinor) || 0) };
+}
+
+async function generateSimpleReviewSetForFolder(folder, source, onlyMissing = true, relativePaths = null, options = {}) {
+  if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('任务缺少参考图');
+  const config = await loadConfig();
+  let jobs = await buildTemplateJobs(source.templateFolderPath, folder);
+  const selectedPaths = relativePaths?.length ? relativePaths : source.templateRelativePaths;
+  if (selectedPaths?.length) {
+    const wanted = new Set(selectedPaths.map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+    jobs = jobs.filter(job => wanted.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+  }
+  if (onlyMissing) jobs = jobs.filter(job => !fs.existsSync(job.outputPath));
+  const startedAt = new Date().toISOString();
+  const total = jobs.length;
+  let current = 0;
+  let apiGenerated = 0;
+  let billingCostMinor = 0;
+  const failures = [];
+  const publishProgress = async update => {
+    const next = {
+      folder,
+      total,
+      current,
+      percent: total ? Math.round(current / total * 100) : 100,
+      apiGenerated,
+      copied: 0,
+      skipped: 0,
+      failed: failures.length,
+      waitingUpstream: 0,
+      pending: Math.max(0, total - current),
+      billingCostMinor,
+      phase: update.phase || 'generating',
+      message: update.message || '',
+      startedAt,
+      completedAt: ['completed', 'completed_with_errors', 'failed'].includes(String(update.phase || '')) ? new Date().toISOString() : '',
+      updatedAt: new Date().toISOString()
+    };
+    await writeJsonFile(metadataPaths(folder).generationProgress, next);
+    if (typeof options.reportProgress === 'function') await options.reportProgress(next);
+  };
+  if (!jobs.length) {
+    await publishProgress({ phase: 'completed', message: '没有需要处理的图片' });
+    return { folder, generated: 0, failures: [], rejected: 0, summary: { total: 0, current: 0, percent: 100, apiGenerated: 0, copied: 0, skipped: 0, failed: 0, waitingUpstream: 0, pending: 0, billingCostMinor: 0 } };
+  }
+  await addOperationLog(folder, `${onlyMissing ? '开始补生成' : '开始重新生成'}：${jobs.length} 张`);
+  await publishProgress({ phase: 'preparing', message: `准备处理 ${jobs.length} 张图片` });
+  for (const job of jobs) {
+    if (options.signal?.aborted) throw new Error('任务已取消');
+    try {
+      await publishProgress({ phase: 'generating', message: `正在重新生成：${job.relativePath}` });
+      const result = await generateSimpleReviewJob(job, source, config, {
+        ...options,
+        bulkGeneration: jobs.length > 1,
+        onRequestState: event => {
+          void publishProgress({
+            phase: 'generating',
+            message: event?.state === 'retrying' ? `生图接口等待重试：${job.relativePath}` : `正在重新生成：${job.relativePath}`
+          }).catch(() => {});
+        }
+      });
+      apiGenerated += 1;
+      billingCostMinor += Math.max(0, Number(result.billedMinor) || 0);
+    } catch (error) {
+      failures.push(`${job.relativePath}: ${error?.message || error}`);
+    } finally {
+      current += 1;
+      await publishProgress({ phase: 'generating', message: `正在处理 ${current}/${total}` });
+    }
+  }
+  if (failures.length) await writeJsonFile(metadataPaths(folder).generationErrors, { updated_at: new Date().toISOString(), count: failures.length, failures });
+  else await fsp.rm(metadataPaths(folder).generationErrors, { force: true }).catch(() => {});
+  const phase = failures.length ? 'completed_with_errors' : 'completed';
+  const message = failures.length ? `处理完成，${failures.length} 张失败` : `处理完成：API 生成 ${apiGenerated} 张`;
+  await publishProgress({ phase, message });
+  await addOperationLog(folder, message);
+  return {
+    folder,
+    generated: total - failures.length,
+    failures,
+    rejected: 0,
+    summary: { total, current, percent: 100, apiGenerated, copied: 0, skipped: 0, failed: failures.length, waitingUpstream: 0, pending: 0, billingCostMinor }
+  };
+}
+
 async function runWithConcurrency(items, limit, worker) {
   const results = new Array(items.length);
   let cursor = 0;
@@ -2511,6 +2631,9 @@ async function runWithConcurrency(items, limit, worker) {
 
 async function generateTemplateSetForFolder(folder, onlyMissing = true, relativePaths = null, options = {}) {
   const source = await readSourceMetadata(folder);
+  if (['free_image', 'taobao_main_images'].includes(source.generationMode)) {
+    return generateSimpleReviewSetForFolder(folder, source, onlyMissing, relativePaths, options);
+  }
   if (source.generationMode !== 'template_print') throw new Error('只支持人工框选套图生成流程');
   if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('任务缺少套图文件夹');
   const config = await loadConfig();
@@ -2684,10 +2807,74 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
 async function regenerateSingleTemplateUnlocked(payload, options = {}) {
   const folder = String(payload?.folder || '');
   const source = await readSourceMetadata(folder);
-  if (source.generationMode !== 'template_print') throw new Error('只支持人工框选套图生成流程');
   const job = await findReviewJob(folder, payload?.relativePath);
   const config = await loadConfig();
   const extraInstruction = String(payload?.extraInstruction || '').trim();
+  if (['free_image', 'taobao_main_images'].includes(source.generationMode)) {
+    const startedAt = new Date().toISOString();
+    const progressFile = metadataPaths(folder).generationProgress;
+    const publishProgress = async update => {
+      const existing = await readJsonFile(progressFile, {});
+      const total = Math.max(1, Number(existing?.total) || Number(source.templateRelativePaths?.length) || 1);
+      const next = {
+        ...(existing && typeof existing === 'object' ? existing : {}),
+        folder,
+        total,
+        current: Math.max(1, Number(existing?.current) || total),
+        percent: Math.max(0, Math.min(100, Number(existing?.percent) || 100)),
+        pending: update.phase === 'generating' ? 1 : 0,
+        waitingUpstream: Math.max(0, Number(update.waitingUpstream) || 0),
+        ...(update || {}),
+        message: String(update?.message || `正在重新生成图片：${job.relativePath}`),
+        activeRelativePath: job.relativePath,
+        startedAt: existing?.startedAt || startedAt,
+        completedAt: update.phase === 'generating' ? '' : new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await writeJsonFile(progressFile, next);
+      if (typeof options.reportProgress === 'function') await options.reportProgress(next);
+      return next;
+    };
+    await addOperationLog(folder, `开始重新生成单张：${job.relativePath}${extraInstruction ? '（含修正要求）' : ''}`);
+    await publishProgress({ phase: 'generating', message: `正在重新生成：${job.relativePath}` });
+    try {
+      const generated = await generateSimpleReviewJob(job, source, config, {
+        extraInstruction,
+        includePreviousResult: Boolean(payload?.includePreviousResult),
+        signal: options.signal,
+        onRequestState: event => {
+          void publishProgress({
+            phase: 'generating',
+            waitingUpstream: event?.state === 'retrying' ? 1 : 0,
+            message: event?.state === 'retrying' ? `生图接口等待重试：${job.relativePath}` : `正在重新生成：${job.relativePath}`
+          }).catch(() => {});
+        }
+      });
+      const progress = await readJsonFile(progressFile, {});
+      await writeJsonFile(progressFile, {
+        ...(progress && typeof progress === 'object' ? progress : {}),
+        billingCostMinor: Math.max(0, Number(progress?.billingCostMinor) || 0) + Math.max(0, Number(generated.billedMinor) || 0),
+        activeRelativePath: '',
+        updatedAt: new Date().toISOString()
+      });
+      const generationErrorsFile = metadataPaths(folder).generationErrors;
+      const generationErrors = await readJsonFile(generationErrorsFile, {});
+      const failurePrefix = `${job.relativePath}:`;
+      const remainingFailures = (Array.isArray(generationErrors?.failures) ? generationErrors.failures : [])
+        .map(String)
+        .filter(message => !message.startsWith(failurePrefix));
+      if (remainingFailures.length) await writeJsonFile(generationErrorsFile, { ...generationErrors, updated_at: new Date().toISOString(), count: remainingFailures.length, failures: remainingFailures });
+      else await fsp.rm(generationErrorsFile, { force: true }).catch(() => {});
+      await addOperationLog(folder, `重新生成完成：${job.relativePath}`);
+      await publishProgress({ phase: 'completed', pending: 0, waitingUpstream: 0, activeRelativePath: '', message: `重新生成完成：${job.relativePath}` });
+      return { folder, relativePath: job.relativePath, outputPath: job.outputPath };
+    } catch (error) {
+      await addOperationLog(folder, `重新生成失败：${job.relativePath}`);
+      await publishProgress({ phase: 'failed', pending: 0, waitingUpstream: 0, activeRelativePath: '', message: `重新生成失败：${job.relativePath}` });
+      throw error;
+    }
+  }
+  if (source.generationMode !== 'template_print') throw new Error('只支持人工框选套图生成流程');
   const referenceResultPath = await resolveReviewReferenceResultPath(folder, payload?.referenceResultRelativePath || '');
   const progressFile = metadataPaths(folder).generationProgress;
   const activeProgress = await readJsonFile(progressFile, {});
