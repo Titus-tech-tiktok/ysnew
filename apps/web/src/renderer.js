@@ -19,6 +19,8 @@ const ASSET_PAGE_SIZE = 100;
 let storageScope = 'anonymous';
 const scopedStorageKey = key => `${key}:${storageScope}`;
 
+const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
 function createClientId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   const bytes = new Uint8Array(16);
@@ -4275,11 +4277,28 @@ function renderReviewStage() {
 
 function newFreeTask(images = []) {
   const prompt = state.promptSettings?.prompts?.find(item => item.id === 'freeImageDefault')?.value || '';
-  return { id: createClientId(), sources: images, prompt, selected: true, status: '待生成', progress: '', jobId: '' };
+  return { id: createClientId(), sources: normalizeTaskImages(images), prompt, selected: true, status: '待生成', progress: '', jobId: '' };
 }
 
 function newTaobaoTask(image) {
-  return { id: createClientId(), source: image, selected: true, status: '待生成', progress: '', jobId: '' };
+  return { id: createClientId(), source: normalizeTaskImage(image), selected: true, status: '待生成', progress: '', jobId: '' };
+}
+
+function normalizeTaskImage(image) {
+  if (!image || typeof image !== 'object') return null;
+  const path = String(image.path || '');
+  const url = String(image.url || '');
+  const name = String(image.name || (path ? path.split(/[\\/]/).pop() : '') || '任务图片');
+  return {
+    ...image,
+    path,
+    name,
+    url: url ? (/[?&]v=/.test(url) ? url : `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(path || name || Date.now())}`) : ''
+  };
+}
+
+function normalizeTaskImages(images = []) {
+  return images.map(normalizeTaskImage).filter(image => image?.path);
 }
 
 async function addFreeTask() {
@@ -4297,7 +4316,8 @@ async function addFreeTaskImages(taskId) {
   if (!images?.length) return;
   const known = new Set(task.sources.map(item => item.path));
   for (const image of images) {
-    if (!known.has(image.path) && task.sources.length < FREE_TASK_MAX_IMAGES) task.sources.push(image);
+    const normalized = normalizeTaskImage(image);
+    if (normalized && !known.has(normalized.path) && task.sources.length < FREE_TASK_MAX_IMAGES) task.sources.push(normalized);
   }
   renderFreeTasks();
 }
@@ -4307,12 +4327,12 @@ async function replaceFreeTaskImage(taskId, imageIndex) {
   if (!task) return;
   const image = await window.caishen.chooseImage();
   if (!image) return;
-  task.sources[imageIndex] = image;
+  task.sources[imageIndex] = normalizeTaskImage(image);
   renderFreeTasks();
 }
 
 function taskImageGrid(images, taskId, kind) {
-  return `<div class="task-card-image-grid">${images.map((image, index) => `<article class="task-card-image"><span>${index + 1}</span><img src="${escapeHtml(image.url)}" alt="任务图片 ${index + 1}"><div><button type="button" data-${kind}-image-replace="${taskId}:${index}">更换</button><button type="button" data-${kind}-image-remove="${taskId}:${index}">删除</button></div></article>`).join('')}</div>`;
+  return `<div class="task-card-image-grid">${normalizeTaskImages(images).map((image, index) => `<article class="task-card-image"><span>${index + 1}</span>${image.url ? `<img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.name || `任务图片 ${index + 1}`)}">` : `<div class="task-card-image-placeholder">${escapeHtml(image.name || `任务图片 ${index + 1}`)}</div>`}<div><button type="button" data-${kind}-image-replace="${taskId}:${index}">更换</button><button type="button" data-${kind}-image-remove="${taskId}:${index}">删除</button></div></article>`).join('')}</div>`;
 }
 
 function renderFreeTasks() {
@@ -4350,7 +4370,7 @@ function handleFreeTaskListClick(event) {
 }
 
 async function generateFree() {
-  const selectedTasks = state.freeTasks.filter(task => task.selected !== false && !['已提交', '生成中', '已进入人工筛图'].includes(task.status));
+  const selectedTasks = state.freeTasks.filter(task => task.selected !== false && task.status !== '生成中');
   if (!selectedTasks.length) return toast('请先勾选要生成的自由生图任务', true);
   const invalid = selectedTasks.find(task => !task.sources.length || !String(task.prompt || '').trim());
   if (invalid) return toast('每个自由生图任务都需要图片和提示词', true);
@@ -4366,7 +4386,7 @@ async function generateFree() {
         });
         submitted += 1;
         task.jobId = job.id || '';
-        task.status = '已提交';
+        task.status = '生成中';
         task.progress = '已提交后台生成，可在人工筛图查看状态';
       } catch (error) {
         task.status = '生成失败';
@@ -4389,7 +4409,8 @@ async function addTaobaoTasks() {
   if (!images?.length) return;
   const known = new Set(state.taobaoTasks.map(item => item.source?.path));
   for (const image of images) {
-    if (!known.has(image.path) && state.taobaoTasks.length < TAOBAO_TASK_MAX_ITEMS) state.taobaoTasks.push(newTaobaoTask(image));
+    const normalized = normalizeTaskImage(image);
+    if (normalized && !known.has(normalized.path) && state.taobaoTasks.length < TAOBAO_TASK_MAX_ITEMS) state.taobaoTasks.push(newTaobaoTask(normalized));
   }
   renderTaobaoTasks();
 }
@@ -4399,7 +4420,7 @@ async function replaceTaobaoTaskImage(taskId) {
   if (!task) return;
   const image = await window.caishen.chooseImage();
   if (!image) return;
-  task.source = image;
+  task.source = normalizeTaskImage(image);
   renderTaobaoTasks();
 }
 
@@ -4447,7 +4468,7 @@ function resetTaobaoPrompts() {
 }
 
 async function generateTaobaoMainImages() {
-  const selectedTasks = state.taobaoTasks.filter(task => task.selected !== false && !['已提交', '生成中', '已进入人工筛图'].includes(task.status));
+  const selectedTasks = state.taobaoTasks.filter(task => task.selected !== false && task.status !== '生成中');
   if (!selectedTasks.length) return toast('请先勾选要生成的主图任务', true);
   if (selectedTasks.some(task => !task.source?.path)) return toast('每个主图任务都需要产品图', true);
   const prompts = state.taobaoPrompts.map(value => String(value || '').trim());
@@ -4465,7 +4486,7 @@ async function generateTaobaoMainImages() {
         });
         submitted += 1;
         task.jobId = job.id || '';
-        task.status = '已提交';
+        task.status = '生成中';
         task.progress = '已提交后台生成，可在人工筛图查看状态';
       } catch (error) {
         task.status = '生成失败';

@@ -4002,12 +4002,26 @@ label input, label textarea {
   z-index: 1;
 }
 
-.task-card-image img {
+.task-card-image img, .task-card-image-placeholder {
   background: white;
   border-radius: 7px;
   aspect-ratio: 1;
-  object-fit: contain;
   width: 100%;
+}
+
+.task-card-image img {
+  object-fit: contain;
+}
+
+.task-card-image-placeholder {
+  color: var(--subtle);
+  border: 1px dashed var(--line);
+  place-items: center;
+  padding: 8px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.4;
+  display: grid;
 }
 
 .task-card-image div {
