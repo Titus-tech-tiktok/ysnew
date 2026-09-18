@@ -4344,6 +4344,13 @@ function renderFreeTasks() {
   target.innerHTML = state.freeTasks.map((task, index) => `<article class="generation-task-card ${task.status === '生成失败' ? 'failed' : ''}" data-free-task="${task.id}"><div class="generation-task-head"><label class="generation-task-select"><input type="checkbox" data-free-task-select="${task.id}"${task.selected !== false ? ' checked' : ''}><span><b>自由生图任务 ${index + 1}</b><small>${escapeHtml(task.status)}${task.progress ? ` · ${escapeHtml(task.progress)}` : ''}</small></span></label><button class="text-button danger-text" data-free-task-remove="${task.id}">删除任务</button></div>${taskImageGrid(task.sources, task.id, 'free')}<div class="generation-task-actions"><button class="secondary" data-free-task-image-add="${task.id}">增加图片</button></div><label>提示词<textarea rows="5" data-free-task-prompt="${task.id}" placeholder="输入这个任务的生成要求">${escapeHtml(task.prompt || '')}</textarea></label></article>`).join('');
 }
 
+function selectedTaskIdsFromDom(selector) {
+  return new Set([...document.querySelectorAll(selector)]
+    .filter(input => input.checked)
+    .map(input => String(input.dataset.freeTaskSelect || input.dataset.taobaoTaskSelect || ''))
+    .filter(Boolean));
+}
+
 function handleFreeTaskListClick(event) {
   if (event.target.closest('[data-free-task-add]')) return addFreeTask();
   const removeTask = event.target.closest('[data-free-task-remove]');
@@ -4370,7 +4377,8 @@ function handleFreeTaskListClick(event) {
 }
 
 async function generateFree() {
-  const selectedTasks = state.freeTasks.filter(task => task.selected !== false && task.status !== '生成中');
+  const checkedIds = selectedTaskIdsFromDom('[data-free-task-select]');
+  const selectedTasks = state.freeTasks.filter(task => (checkedIds.size ? checkedIds.has(task.id) : task.selected !== false) && task.status !== '生成中');
   if (!selectedTasks.length) return toast('请先勾选要生成的自由生图任务', true);
   const invalid = selectedTasks.find(task => !task.sources.length || !String(task.prompt || '').trim());
   if (invalid) return toast('每个自由生图任务都需要图片和提示词', true);
@@ -4468,7 +4476,8 @@ function resetTaobaoPrompts() {
 }
 
 async function generateTaobaoMainImages() {
-  const selectedTasks = state.taobaoTasks.filter(task => task.selected !== false && task.status !== '生成中');
+  const checkedIds = selectedTaskIdsFromDom('[data-taobao-task-select]');
+  const selectedTasks = state.taobaoTasks.filter(task => (checkedIds.size ? checkedIds.has(task.id) : task.selected !== false) && task.status !== '生成中');
   if (!selectedTasks.length) return toast('请先勾选要生成的主图任务', true);
   if (selectedTasks.some(task => !task.source?.path)) return toast('每个主图任务都需要产品图', true);
   const prompts = state.taobaoPrompts.map(value => String(value || '').trim());
