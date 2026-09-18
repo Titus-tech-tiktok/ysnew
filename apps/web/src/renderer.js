@@ -2977,6 +2977,12 @@ function closeReviewRegenerationDialog(result = null) {
 
 function openReviewRegenerationDialog(item, job) {
   if (state.reviewRegenerationDialog) closeReviewRegenerationDialog(null);
+  const generationMode = item?.source?.generationMode || '';
+  const simplePromptTask = ['free_image', 'taobao_main_images'].includes(generationMode);
+  const rolePrompt = generationMode === 'taobao_main_images'
+    ? (TAOBAO_PROMPT_DEFAULTS[Math.max(0, Math.min(4, (Number(String(job.relativePath || '').match(/0?([1-5])/)?.[1]) || 1) - 1))]?.value || '')
+    : '';
+  const initialPrompt = String(generationMode === 'free_image' ? item?.source?.note : rolePrompt).trim();
   const candidates = reviewRegenerationReferenceCandidates(item, job);
   const element = document.createElement('div');
   element.className = 'review-regenerate-modal-backdrop';
@@ -2986,8 +2992,8 @@ function openReviewRegenerationDialog(item, job) {
       <button class="icon-button" type="button" data-review-regenerate-close aria-label="关闭">×</button>
     </header>
     <div class="review-regenerate-body">
-      <label class="review-regenerate-field"><b>本次额外要求</b><textarea data-review-regenerate-note rows="4" placeholder="例如：印花只能覆盖柜门面板，不能盖住黑色边框、台面、侧板、柜脚和场景物品。"></textarea></label>
-      <label class="review-regenerate-check"><input type="checkbox" data-review-regenerate-previous ${job.outputUrl ? '' : 'disabled'}>参考当前这张不合格结果，只修正问题</label>
+      <label class="review-regenerate-field"><b>${simplePromptTask ? '生成提示词' : '本次额外要求'}</b><textarea data-review-regenerate-note rows="${simplePromptTask ? '8' : '4'}" placeholder="${simplePromptTask ? '编辑本次重新生成要使用的完整提示词。' : '例如：印花只能覆盖柜门面板，不能盖住黑色边框、台面、侧板、柜脚和场景物品。'}">${escapeHtml(simplePromptTask ? initialPrompt : '')}</textarea></label>
+      ${simplePromptTask ? '<p class="review-regenerate-note">当前任务来自自由生图或一键生成主图，重新生成只会使用上方提示词和原始参考图，不需要人工框选参考项。</p>' : `<label class="review-regenerate-check"><input type="checkbox" data-review-regenerate-previous ${job.outputUrl ? '' : 'disabled'}>参考当前这张不合格结果，只修正问题</label>
       <div class="review-regenerate-reference">
         <div><b>可选参考结果图</b><span>选择一张已经生成的效果图，只参考印花落位和柜体结构，不复制它的构图或尺寸。</span></div>
         <div class="review-regenerate-reference-list">
@@ -3002,7 +3008,7 @@ function openReviewRegenerationDialog(item, job) {
           </label>`).join('')}
         </div>
       </div>
-      <p class="review-regenerate-note">基础输入仍固定为套图原图、母版图、印花原图、红框标注图；所选结果图只作为追加参考。</p>
+      <p class="review-regenerate-note">基础输入仍固定为套图原图、母版图、印花原图、红框标注图；所选结果图只作为追加参考。</p>`}
     </div>
     <footer><button class="secondary" type="button" data-review-regenerate-cancel>取消</button><button class="primary" type="button" data-review-regenerate-submit>提交重新生成</button></footer>
   </section>`;
@@ -3022,10 +3028,12 @@ function openReviewRegenerationDialog(item, job) {
     }
     if (event.target.closest('[data-review-regenerate-submit]')) {
       const reference = element.querySelector('input[name="review-regenerate-reference"]:checked')?.value || '';
+      const promptText = element.querySelector('[data-review-regenerate-note]')?.value || '';
       closeReviewRegenerationDialog({
-        extraInstruction: element.querySelector('[data-review-regenerate-note]')?.value || '',
-        includePreviousResult: Boolean(element.querySelector('[data-review-regenerate-previous]')?.checked),
-        referenceResultRelativePath: reference
+        extraInstruction: promptText,
+        includePreviousResult: simplePromptTask ? false : Boolean(element.querySelector('[data-review-regenerate-previous]')?.checked),
+        referenceResultRelativePath: simplePromptTask ? '' : reference,
+        replacePrompt: simplePromptTask
       });
     }
   });
@@ -4233,7 +4241,8 @@ function renderReviewStage() {
             relativePath: job.relativePath,
             extraInstruction: regenExtraInstruction,
             includePreviousResult: Boolean(regenerationOptions.includePreviousResult),
-            referenceResultRelativePath: regenerationOptions.referenceResultRelativePath || ''
+            referenceResultRelativePath: regenerationOptions.referenceResultRelativePath || '',
+            replacePrompt: Boolean(regenerationOptions.replacePrompt)
           }, (progress, backgroundJob) => {
             if (backgroundJob?.id && ['queued', 'running'].includes(backgroundJob.status)) {
               state.reviewRegenerationJobIds.set(reviewRegenerateKey, backgroundJob.id);

@@ -2504,6 +2504,7 @@ function taobaoMainRoleFromRelativePath(relativePath) {
 
 function simpleReviewPromptForJob(job, source, options = {}) {
   const extraInstruction = String(options.extraInstruction || '').trim();
+  if (options.replacePrompt && extraInstruction) return extraInstruction;
   if (source.generationMode === 'taobao_main_images') {
     const role = taobaoMainRoleFromRelativePath(job.relativePath);
     const prompt = taobaoMainPrompt(role, role.direction);
@@ -2840,6 +2841,7 @@ async function regenerateSingleTemplateUnlocked(payload, options = {}) {
     try {
       const generated = await generateSimpleReviewJob(job, source, config, {
         extraInstruction,
+        replacePrompt: Boolean(payload?.replacePrompt),
         includePreviousResult: Boolean(payload?.includePreviousResult),
         signal: options.signal,
         onRequestState: event => {
