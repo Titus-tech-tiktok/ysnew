@@ -1856,7 +1856,8 @@ async function startServer() {
   });
 
   app.post('/api/upload/image', upload.single('file'), async (req, res, next) => {
-    try {
+    return runtime.runWithWorkspace(req.user.workspaceId, async () => {
+      try {
       if (!req.file) return res.status(400).json({ error: '没有收到图片' });
       const originalName = uploadName(req.file);
       const extension = path.extname(originalName).toLowerCase();
@@ -1867,12 +1868,14 @@ async function startServer() {
       const destination = path.join(assetRoot(), 'free', `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${extension}`);
       await moveUploadedFile(req.file.path, destination);
       return res.json({ path: destination, name: safeSegment(originalName), url: fileUrl(destination) });
-    } catch (error) { next(error); }
+      } catch (error) { next(error); }
+    });
   });
 
   app.post('/api/upload/images', upload.array('files', 30), async (req, res, next) => {
-    const saved = [];
-    try {
+    return runtime.runWithWorkspace(req.user.workspaceId, async () => {
+      const saved = [];
+      try {
       if (!req.files?.length) return res.status(400).json({ error: '没有收到图片' });
       for (const file of req.files) {
         const originalName = uploadName(file);
@@ -1887,18 +1890,21 @@ async function startServer() {
       }
       if (!saved.length) return res.status(415).json({ error: '没有支持的图片格式' });
       return res.json({ data: saved });
-    } catch (error) { next(error); }
+      } catch (error) { next(error); }
+    });
   });
 
   app.get('/api/files/:token', async (req, res) => {
-    const file = decodeFileToken(req.params.token);
-    const stat = file ? await fsp.stat(file).catch(() => null) : null;
-    if (!stat?.isFile()) return res.sendStatus(404);
-    if (req.query.download === '1') res.download(file, path.basename(file));
-    else {
-      res.set('Cache-Control', req.query.v ? 'private, max-age=31536000, immutable' : 'private, no-cache');
-      res.sendFile(file, { dotfiles: 'allow' });
-    }
+    return runtime.runWithWorkspace(req.user.workspaceId, async () => {
+      const file = decodeFileToken(req.params.token);
+      const stat = file ? await fsp.stat(file).catch(() => null) : null;
+      if (!stat?.isFile()) return res.sendStatus(404);
+      if (req.query.download === '1') res.download(file, path.basename(file));
+      else {
+        res.set('Cache-Control', req.query.v ? 'private, max-age=31536000, immutable' : 'private, no-cache');
+        res.sendFile(file, { dotfiles: 'allow' });
+      }
+    });
   });
 
   app.get('/api/zip/:token', async (req, res, next) => {
